@@ -1,3 +1,8 @@
 package tywinlanni.github.com.plankaTelegram.planka
 
-data class Token()
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class Token(
+    val item: String,
+)

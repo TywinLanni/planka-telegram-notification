@@ -1,4 +1,4 @@
-package tywinlanni.github.com.plankaTelegram
+package tywinlanni.github.com.plankaTelegram.planka
 
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -20,7 +20,7 @@ class PlankaClient(
     private val plankaUsername: String,
     private val plankaPassword: String,
 ) {
-    private var token: String = ""
+    private val tokenBuffer = mutableListOf(BearerTokens("", ""))
 
     private val client = HttpClient(CIO) {
         defaultRequest {
@@ -48,14 +48,29 @@ class PlankaClient(
         install(Auth) {
             bearer {
                 loadTokens {
-                    BearerTokens(token, "")
+                    tokenBuffer.last()
+                }
+                refreshTokens {
+                    login()
+                    tokenBuffer.last()
                 }
             }
         }
     }
 
-    suspend fun login() = client.submitForm("/api/access-tokens") {
-        parameter(key = "emailOrUsername", value = plankaUsername)
-        parameter(key = "password", value = plankaPassword)
-    }.body<String>().also { println(it) }
+    private suspend fun login() {
+        client.submitForm("/api/access-tokens") {
+            parameter(key = "emailOrUsername", value = plankaUsername)
+            parameter(key = "password", value = plankaPassword)
+        }.body<Token>()
+            .let { token ->
+                tokenBuffer.add(
+                    BearerTokens(accessToken = token.item, refreshToken = "")
+                )
+            }
+    }
+
+    suspend fun projects() = client.get("/api/projects").body<Projects>()
+
+    suspend fun board(boardId: Long) = client.get("/api/boards/$boardId").body<BoardResponse>()
 }
