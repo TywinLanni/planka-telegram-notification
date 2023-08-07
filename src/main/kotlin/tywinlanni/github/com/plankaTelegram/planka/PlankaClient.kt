@@ -14,17 +14,15 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 class PlankaClient(
-    plankaHost: String,
-    plankaPort: String,
-    plankaProtocol: String,
+    val plankaUrl: String,
     private val plankaUsername: String,
     private val plankaPassword: String,
 ) {
-    private val tokenBuffer = mutableListOf(BearerTokens("", ""))
+    private val tokenBuffer = mutableListOf<BearerTokens>()
 
     private val client = HttpClient(CIO) {
         defaultRequest {
-            url("$plankaProtocol://$plankaHost:$plankaPort")
+            url(plankaUrl)
         }
         install(HttpRequestRetry) {
             retryOnServerErrors(maxRetries = 3)
@@ -47,9 +45,6 @@ class PlankaClient(
         }
         install(Auth) {
             bearer {
-                loadTokens {
-                    tokenBuffer.last()
-                }
                 refreshTokens {
                     login()
                     tokenBuffer.last()
@@ -70,7 +65,9 @@ class PlankaClient(
             }
     }
 
-    suspend fun projects() = client.get("/api/projects").body<Projects>()
+    suspend fun projects() = client.get("/api/projects")
+        .body<Projects>()
 
-    suspend fun board(boardId: Long) = client.get("/api/boards/$boardId").body<BoardResponse>()
+    suspend fun board(boardId: Long) = client.get("/api/boards/$boardId")
+        .body<BoardResponse>()
 }

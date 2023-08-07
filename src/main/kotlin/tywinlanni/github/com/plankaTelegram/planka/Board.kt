@@ -11,7 +11,9 @@ data class BoardResponse(
 @Serializable
 data class BoardIncluded(
     val lists: List<PlankaList>,
-    val cards: List<Card>,
+    val cards: List<CardData>,
+    val users: List<UserData>,
+    val tasks: List<TaskData>,
 )
 
 @Serializable
@@ -22,9 +24,25 @@ data class PlankaList(
 )
 
 @Serializable
-data class Card(
+data class CardData(
+    val name: String,
     val id: Long,
     val boardId: Long,
     val listId: Long,
+    val creatorUserId: Long,
+    val description: Long,
+)
+
+@Serializable
+data class TaskData(
     val name: String,
+    val id: Long,
+    val cardId: Long,
+    val isCompleted: Boolean,
+)
+
+@Serializable
+data class UserData(
+    val name: String,
+    val id: Long,
 )
