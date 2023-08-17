@@ -1,10 +1,12 @@
 package tywinlanni.github.com.plankaTelegram.planka
 
+import tywinlanni.github.com.plankaTelegram.share.*
+
 data class PlankaData(
-    val projects: Map<Long, Project>,
-    val boards: Map<Long, Board>,
-    val cards: Map<Long, CardData>,
-    val users: Map<Long, UserData>,
-    val lists: Map<Long, PlankaList>,
-    val tasks: Map<Long, TaskData>,
+    val projects: Map<ProjectId, Project>,
+    val boards: Map<BoardId, Board>,
+    val cards: Map<CardId, CardData>,
+    val users: Map<UserId, UserData>,
+    val lists: Map<ListId, PlankaList>,
+    val tasks: Map<TaskId, TaskData>,
 )

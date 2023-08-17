@@ -1,6 +1,8 @@
 package tywinlanni.github.com.plankaTelegram.planka
 
 import kotlinx.serialization.Serializable
+import tywinlanni.github.com.plankaTelegram.share.BoardId
+import tywinlanni.github.com.plankaTelegram.share.ProjectId
 
 @Serializable
 data class Projects(
@@ -10,7 +12,7 @@ data class Projects(
 
 @Serializable
 data class Project(
-    val id: Long,
+    val id: ProjectId,
     val name: String,
 )
 
@@ -22,6 +24,6 @@ data class Included(
 @Serializable
 data class Board(
     val name: String,
-    val id: Long,
+    val id: BoardId,
     val projectId: Long,
 )

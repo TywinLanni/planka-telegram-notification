@@ -1,6 +1,7 @@
 package tywinlanni.github.com.plankaTelegram.planka
 
 import kotlinx.serialization.Serializable
+import tywinlanni.github.com.plankaTelegram.share.*
 
 @Serializable
 data class BoardResponse(
@@ -18,31 +19,31 @@ data class BoardIncluded(
 
 @Serializable
 data class PlankaList(
-    val id: Long,
-    val boardId: Long,
+    val id: ListId,
+    val boardId: BoardId,
     val name: String,
 )
 
 @Serializable
 data class CardData(
     val name: String,
-    val id: Long,
-    val boardId: Long,
-    val listId: Long,
+    val id: CardId,
+    val boardId: BoardId,
+    val listId: ListId,
     val creatorUserId: Long,
-    val description: Long,
+    val description: String?,
 )
 
 @Serializable
 data class TaskData(
     val name: String,
-    val id: Long,
-    val cardId: Long,
+    val id: TaskId,
+    val cardId: CardId,
     val isCompleted: Boolean,
 )
 
 @Serializable
 data class UserData(
     val name: String,
-    val id: Long,
+    val id: UserId,
 )

@@ -14,7 +14,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 class PlankaClient(
-    val plankaUrl: String,
+    plankaUrl: String,
     private val plankaUsername: String,
     private val plankaPassword: String,
 ) {
@@ -32,7 +32,7 @@ class PlankaClient(
                 3000L
             }
         }
-        install(Logging) { level = LogLevel.INFO }
+        //install(Logging) { level = LogLevel.INFO }
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
@@ -70,4 +70,33 @@ class PlankaClient(
 
     suspend fun board(boardId: Long) = client.get("/api/boards/$boardId")
         .body<BoardResponse>()
+
+    suspend fun loadPlankaState(): PlankaData {
+        val projects = projects()
+
+        val cards = mutableMapOf<Long, CardData>()
+        val users = mutableMapOf<Long, UserData>()
+        val lists = mutableMapOf<Long, PlankaList>()
+        val tasks = mutableMapOf<Long, TaskData>()
+
+        projects.included.boards
+            .forEach { board ->
+                board(board.id)
+                    .run {
+                        cards.putAll(included.cards.associateBy { it.id })
+                        users.putAll(included.users.associateBy { it.id })
+                        lists.putAll(included.lists.associateBy { it.id })
+                        tasks.putAll(included.tasks.associateBy { it.id })
+                    }
+            }
+
+        return PlankaData(
+            projects = projects.items.associateBy { it.id },
+            boards = projects.included.boards.associateBy { it.id },
+            cards = cards,
+            users = users,
+            lists = lists,
+            tasks = tasks,
+        )
+    }
 }
