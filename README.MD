@@ -19,7 +19,7 @@ docker image push planka-notification-bot:latest
 ## Run
 
 ```bash
-docker create --name bot -e MONGO_CONNECTION_STRING=mongodb://172.17.0.1:27017 -e PLANKA_HOST=0.0.0.0 -e PLANKA_PORT=3000 -e PLANKA_SERVICE_USERNAME=xxx@gmail.com -e PLANKA_SERVICE_PASSWORD=12345678 -e TELEGRAM_BOT_TOKEN=xxxxxx planka-notification-bot
+docker create --name bot --network="host" -e PLANKA_CONNECTION_STRING=http://0.0.0.0:3000 -e PLANKA_SERVICE_USERNAME=xxx@gmail.com -e PLANKA_SERVICE_PASSWORD=12345678 -e TELEGRAM_BOT_TOKEN=xxxxxx planka-notification-bot
 ```
 
 ```bash
@@ -28,12 +28,9 @@ docker start bot
 
 ## Environment variables
 
-- `PLANKA_HOST` - planka host
-- `PLANKA_PORT` - planka port
-- `PLANKA_PROTOCOL` - planka protocol (default `http`)
-- `PLANKA_URL` - url to planka (instead of PLANKA_HOST, PLANKA_PORT, PLANKA_PROTOCOL)
+- `PLANKA_CONNECTION_STRING` - url to planka
 - `PLANKA_SERVICE_USERNAME` - service account login
 - `PLANKA_SERVICE_PASSWORD` - service account password
 - `MONGO_CONNECTION_STRING` - mongo db connection string (default `mongodb://localhost`)
 - `DATABASE_NAME` - mongo database name (default `Planka`)
-- `TELEGRAM_BOT_TOKEN` - telegram bot token 
+- `TELEGRAM_BOT_TOKEN` - telegram bot token
