@@ -7,3 +7,4 @@ typealias UserId = Long
 typealias ProjectId = Long
 typealias TaskId = Long
 typealias ListId = Long
+typealias ActionId = Long

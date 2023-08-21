@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "tywinlanni.github.com"
-version = "0.0.1"
+version = "0.0.2"
 
 application {
     mainClass.set("tywinlanni.github.com.plankaTelegram.MainKt")

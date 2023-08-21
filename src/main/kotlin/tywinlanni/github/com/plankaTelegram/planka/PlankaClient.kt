@@ -7,11 +7,12 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import tywinlanni.github.com.plankaTelegram.share.ActionId
+import tywinlanni.github.com.plankaTelegram.share.CardId
 
 class PlankaClient(
     plankaUrl: String,
@@ -68,7 +69,7 @@ class PlankaClient(
     suspend fun projects() = client.get("/api/projects")
         .body<Projects>()
 
-    suspend fun board(boardId: Long) = client.get("/api/boards/$boardId")
+    suspend fun loadBoardData(boardId: Long) = client.get("/api/boards/$boardId")
         .body<BoardResponse>()
 
     suspend fun loadPlankaState(): PlankaData {
@@ -78,10 +79,11 @@ class PlankaClient(
         val users = mutableMapOf<Long, UserData>()
         val lists = mutableMapOf<Long, PlankaList>()
         val tasks = mutableMapOf<Long, TaskData>()
+        val actions = mutableMapOf<ActionId, Action>()
 
         projects.included.boards
             .forEach { board ->
-                board(board.id)
+                loadBoardData(board.id)
                     .run {
                         cards.putAll(included.cards.associateBy { it.id })
                         users.putAll(included.users.associateBy { it.id })
@@ -90,6 +92,13 @@ class PlankaClient(
                     }
             }
 
+        cards.keys.forEach { cardId ->
+            loadCardActions(cardId)
+                .let { responseBody ->
+                    actions.putAll(responseBody.items.associateBy { it.id })
+                }
+        }
+
         return PlankaData(
             projects = projects.items.associateBy { it.id },
             boards = projects.included.boards.associateBy { it.id },
@@ -97,6 +106,10 @@ class PlankaClient(
             users = users,
             lists = lists,
             tasks = tasks,
+            actions = actions,
         )
     }
+
+    suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions")
+        .body<Actions>()
 }

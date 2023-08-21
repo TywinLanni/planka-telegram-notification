@@ -9,4 +9,5 @@ data class PlankaData(
     val users: Map<UserId, UserData>,
     val lists: Map<ListId, PlankaList>,
     val tasks: Map<TaskId, TaskData>,
+    val actions: Map<ActionId, Action>,
 )
