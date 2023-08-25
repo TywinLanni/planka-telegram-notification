@@ -13,6 +13,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import tywinlanni.github.com.plankaTelegram.share.ActionId
 import tywinlanni.github.com.plankaTelegram.share.CardId
+import tywinlanni.github.com.plankaTelegram.share.UserId
 
 class PlankaClient(
     plankaUrl: String,
@@ -112,4 +113,7 @@ class PlankaClient(
 
     suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions")
         .body<Actions>()
+
+    suspend fun getUserData() = client.get("/api/users")
+        .body<UsersData>()
 }

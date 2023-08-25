@@ -11,11 +11,13 @@ import kotlinx.coroutines.*
 import tywinlanni.github.com.plankaTelegram.db.DAO
 import tywinlanni.github.com.plankaTelegram.db.Notification
 import tywinlanni.github.com.plankaTelegram.db.UserPlankaCredentials
+import tywinlanni.github.com.plankaTelegram.planka.PlankaClient
 import tywinlanni.github.com.plankaTelegram.wacher.Watcher
 
 class NotificationBot(
     botToken: String,
     private val dao: DAO,
+    private val plankaUrl: String,
 ) {
     private val job = SupervisorJob()
     private val botScope = CoroutineScope(Dispatchers.IO + job)
@@ -97,11 +99,25 @@ class NotificationBot(
                         return@launch
                     }
 
+                    val credentials = dao.getCredentialsByTelegramId(message.chat.id)
+                        ?: return@launch
+
+                    val userId = PlankaClient(
+                        plankaUrl = plankaUrl,
+                        plankaUsername = credentials.plankaLogin,
+                        plankaPassword = credentials.plankaPassword
+                    ).getUserData()
+                        .items
+                        .find { it.username == credentials.plankaLogin || it.email == credentials.plankaLogin }
+                        ?.id
+                        ?: return@launch
+
                     try {
                         dao.addNotification(
                             notification = Notification(
                                 telegramChatId = message.chat.id,
-                                watchedActions = Watcher.BoardAction.entries
+                                watchedActions = Watcher.BoardAction.entries,
+                                userId = userId,
                             )
                         )
                     } catch (e: MongoWriteException) {

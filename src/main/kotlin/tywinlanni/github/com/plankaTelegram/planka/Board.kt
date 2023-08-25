@@ -45,5 +45,7 @@ data class TaskData(
 @Serializable
 data class UserData(
     val name: String,
+    val username: String?,
+    val email: String,
     val id: UserId,
 )

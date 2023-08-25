@@ -100,74 +100,81 @@ class Watcher(
                                             action in listOf(BoardAction.UPDATE, BoardAction.TASK_ADD))
                                             return@forEach
 
-                                        notificationsByBoards[boardId]?.forEach { notification ->
+                                        notificationsByBoards[boardId]?.forEach forNotifications@ { notification ->
                                             if (action in notification.watchedActions) {
-                                                notificationBot.sendNotification(
-                                                    chatId = ChatId.fromId(notification.telegramChatId),
-                                                    text = when (action) {
-                                                        BoardAction.ADD -> {
-                                                            addBoardToSpamProtected(cardId)
-                                                            buildMessage(
-                                                                message = "Создана задача: ${card.name}\n" +
-                                                                        "Пользователем: ${state.value?.users?.get(card.creatorUserId)?.name}\n",
+                                                val maybeUser = state.value?.users?.get(card.creatorUserId)
+
+                                                if ((action == BoardAction.ADD || action == BoardAction.ADD_COMMENT)
+                                                    && notification.userId == maybeUser?.id) {
+                                                    return@forNotifications
+                                                } else {
+                                                    notificationBot.sendNotification(
+                                                        chatId = ChatId.fromId(notification.telegramChatId),
+                                                        text = when (action) {
+                                                            BoardAction.ADD -> {
+                                                                addBoardToSpamProtected(cardId)
+                                                                buildMessage(
+                                                                    message = "Создана задача: ${card.name}\n" +
+                                                                            "Пользователем: ${maybeUser?.name}\n",
+                                                                    card = card,
+                                                                )
+                                                            }
+
+                                                            BoardAction.UPDATE -> {
+                                                                addBoardToSpamProtected(cardId)
+                                                                buildMessage(
+                                                                    message = "Обновлена задача: ${card.name}\n",
+                                                                    card = card,
+                                                                )
+                                                            }
+
+                                                            BoardAction.MOVE ->
+                                                                buildMessage(
+                                                                    message = "Задача: ${card.name}, была перемещена. " +
+                                                                            "Новая позиция:\n",
+                                                                    card = card,
+                                                                )
+
+                                                            BoardAction.DELETE -> buildMessage(
+                                                                message = "Удалена задача: ${card.name}\n",
+                                                                card = card,
+                                                            )
+
+                                                            BoardAction.TASK_ADD -> {
+                                                                buildMessage(
+                                                                    message = "Добавлены новые подзадачи в задачу: ${card.name}:\n" +
+                                                                            diff.addedTasks[cardId]
+                                                                                ?.joinToString("\n") { it.name } + "\n\n",
+                                                                    card = card,
+                                                                )
+                                                            }
+
+                                                            BoardAction.TASK_REMOVE -> buildMessage(
+                                                                message = "Из задачи: ${card.name} удалены подзадачи:\n" +
+                                                                        diff.removedTasks[cardId]
+                                                                            ?.joinToString("\n") { it.name } + "\n\n",
+                                                                card = card,
+                                                            )
+
+                                                            BoardAction.TASK_COMPLETE -> buildMessage(
+                                                                message = "В задаче: ${card.name}" +
+                                                                        " следующие подзадачи отмечены как выполненые:\n" +
+                                                                        diff.completedTasks[cardId]
+                                                                            ?.joinToString("\n") { it.name } + "\n\n",
+                                                                card = card,
+                                                            )
+
+                                                            BoardAction.ADD_COMMENT -> buildMessage(
+                                                                message = "В задаче: ${card.name} новые коментарии:\n" +
+                                                                        diff.updatedComments[cardId]
+                                                                            ?.joinToString("\n") {
+                                                                                (maybeUser?.name ?: "") + ": " + it.data.text
+                                                                            } + "\n\n",
                                                                 card = card,
                                                             )
                                                         }
-
-                                                        BoardAction.UPDATE -> {
-                                                            addBoardToSpamProtected(cardId)
-                                                            buildMessage(
-                                                                message = "Обновлена задача: ${card.name}\n",
-                                                                card = card,
-                                                            )
-                                                        }
-
-                                                        BoardAction.MOVE ->
-                                                            buildMessage(
-                                                                message = "Задача: ${card.name}, была перемещена. " +
-                                                                        "Новая позиция:\n",
-                                                                card = card,
-                                                            )
-
-                                                        BoardAction.DELETE -> buildMessage(
-                                                            message = "Удалена задача: ${card.name}\n",
-                                                            card = card,
-                                                        )
-
-                                                        BoardAction.TASK_ADD -> {
-                                                            buildMessage(
-                                                                message = "Добавлены новые подзадачи в карту: ${card.name}:\n" +
-                                                                        diff.addedTasks[cardId]
-                                                                            ?.joinToString("\n") { it.name } + "\n",
-                                                                card = card,
-                                                            )
-                                                        }
-
-                                                        BoardAction.TASK_REMOVE -> buildMessage(
-                                                            message = "Из задачи: ${card.name} удалены подзадачи:\n" +
-                                                                    diff.removedTasks[cardId]
-                                                                        ?.joinToString("\n") { it.name } + "\n",
-                                                            card = card,
-                                                        )
-
-                                                        BoardAction.TASK_COMPLETE -> buildMessage(
-                                                            message = "В задаче: ${card.name}" +
-                                                                    " следующие подзадачи отмечены как выполнение:\n" +
-                                                                    diff.completedTasks[cardId]
-                                                                        ?.joinToString("\n") { it.name } + "\n",
-                                                            card = card,
-                                                        )
-
-                                                        BoardAction.ADD_COMMENT -> buildMessage(
-                                                            message = "В задаче: ${card.name} новые коментарии:\n" +
-                                                                    diff.updatedComments[cardId]
-                                                                        ?.joinToString("\n") {
-                                                                            (state.value?.users?.get(it.userId)?.name ?: "") + ": " + it.data.text
-                                                                        } + "\n",
-                                                            card = card,
-                                                        )
-                                                    }
-                                                )
+                                                    )
+                                                }
                                                 logger.debug("Send notification to telegram channel: ${notification.telegramChatId}")
                                             }
                                         }

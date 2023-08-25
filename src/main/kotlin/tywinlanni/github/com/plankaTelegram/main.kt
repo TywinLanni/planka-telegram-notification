@@ -32,6 +32,7 @@ suspend fun main() {
     val notificationBot = NotificationBot(
         botToken = telegramBotToken,
         dao = dao,
+        plankaUrl = plankaConnectionString,
     ).apply {
         startPolling()
     }
