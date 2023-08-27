@@ -111,8 +111,9 @@ class PlankaClient(
         )
     }
 
-    suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions")
-        .body<Actions>()
+    suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
+        parameter(key = "withDetails", value = true)
+    }.body<Actions>()
 
     suspend fun getUserData() = client.get("/api/users")
         .body<UsersData>()

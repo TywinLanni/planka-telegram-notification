@@ -2,6 +2,10 @@
 
 This is a telegram bot that uses the planka api to send card change to telegram.
 
+## Requirements
+
+1. [Mongo DB](https://www.mongodb.com/) 
+
 ## How to use
 
 1. Create a telegram bot using the [BotFather](https://t.me/botfather)
