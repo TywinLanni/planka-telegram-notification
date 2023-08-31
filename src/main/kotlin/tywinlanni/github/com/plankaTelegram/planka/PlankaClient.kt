@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import tywinlanni.github.com.plankaTelegram.share.ActionId
 import tywinlanni.github.com.plankaTelegram.share.CardId
 import tywinlanni.github.com.plankaTelegram.share.ListId
+import tywinlanni.github.com.plankaTelegram.share.TaskId
 
 class PlankaClient(
     plankaUrl: String,
@@ -24,8 +25,8 @@ class PlankaClient(
     private val tokenBuffer = mutableListOf<BearerTokens>()
 
     private val disabledListsId by lazy { mutableSetOf<ListId>() }
-    private val disabledCardId by lazy { mutableSetOf<ListId>() }
-    private val disabledTaskId by lazy { mutableSetOf<ListId>() }
+    private val disabledCardId by lazy { mutableSetOf<CardId>() }
+    private val disabledTaskId by lazy { mutableSetOf<TaskId>() }
 
     private val client = HttpClient(CIO) {
         defaultRequest {
