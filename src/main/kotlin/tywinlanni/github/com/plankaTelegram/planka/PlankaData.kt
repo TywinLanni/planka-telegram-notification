@@ -10,4 +10,5 @@ data class PlankaData(
     val lists: Map<ListId, PlankaList>,
     val tasks: Map<TaskId, TaskData>,
     val actions: Map<ActionId, Action>,
+    val disabledListsId: Set<ListId>,
 )

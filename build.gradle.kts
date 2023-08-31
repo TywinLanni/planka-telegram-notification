@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "tywinlanni.github.com"
-version = "0.0.3"
+version = "0.0.4"
 
 application {
     mainClass.set("tywinlanni.github.com.plankaTelegram.MainKt")
@@ -35,7 +35,6 @@ dependencies {
 
     implementation("io.github.kotlin-telegram-bot.kotlin-telegram-bot:telegram:$telegram_bot_version")
 
-    implementation("org.litote.kmongo:kmongo-async:$kmongo_version")
     implementation("org.litote.kmongo:kmongo-coroutine:$kmongo_version")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")

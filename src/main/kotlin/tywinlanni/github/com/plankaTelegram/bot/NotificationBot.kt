@@ -105,7 +105,8 @@ class NotificationBot(
                     val userId = PlankaClient(
                         plankaUrl = plankaUrl,
                         plankaUsername = credentials.plankaLogin,
-                        plankaPassword = credentials.plankaPassword
+                        plankaPassword = credentials.plankaPassword,
+                        maybeDisabledNotificationListNames = null,
                     ).getUserData()
                         .items
                         .find { it.username == credentials.plankaLogin || it.email == credentials.plankaLogin }

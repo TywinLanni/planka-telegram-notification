@@ -16,10 +16,14 @@ suspend fun main() {
 
     val telegramBotToken = System.getenv("TELEGRAM_BOT_TOKEN")
 
+    val maybeDisabledNotificationListNames = System.getenv("DISABLED_PLANKA_LIST_NAMES")
+        ?.split(",")
+
     val client = PlankaClient(
         plankaUrl = plankaConnectionString,
         plankaUsername = plankaUsername,
         plankaPassword = plankaPassword,
+        maybeDisabledNotificationListNames = maybeDisabledNotificationListNames,
     )
 
     val dao: DAO = MongoDb(

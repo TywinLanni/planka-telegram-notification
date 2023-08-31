@@ -38,3 +38,4 @@ docker start bot
 - `MONGO_CONNECTION_STRING` - mongo db connection string (default `mongodb://localhost`)
 - `DATABASE_NAME` - mongo database name (default `Planka`)
 - `TELEGRAM_BOT_TOKEN` - telegram bot token
+- `DISABLED_PLANKA_LIST_NAMES` - specific list to disable notification comma separated (improve bot speed) not require

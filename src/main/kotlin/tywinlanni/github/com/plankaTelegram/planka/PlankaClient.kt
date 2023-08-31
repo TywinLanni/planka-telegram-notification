@@ -13,14 +13,19 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import tywinlanni.github.com.plankaTelegram.share.ActionId
 import tywinlanni.github.com.plankaTelegram.share.CardId
-import tywinlanni.github.com.plankaTelegram.share.UserId
+import tywinlanni.github.com.plankaTelegram.share.ListId
 
 class PlankaClient(
     plankaUrl: String,
     private val plankaUsername: String,
     private val plankaPassword: String,
+    private val maybeDisabledNotificationListNames: List<String>?,
 ) {
     private val tokenBuffer = mutableListOf<BearerTokens>()
+
+    private val disabledListsId by lazy { mutableSetOf<ListId>() }
+    private val disabledCardId by lazy { mutableSetOf<ListId>() }
+    private val disabledTaskId by lazy { mutableSetOf<ListId>() }
 
     private val client = HttpClient(CIO) {
         defaultRequest {
@@ -86,10 +91,51 @@ class PlankaClient(
             .forEach { board ->
                 loadBoardData(board.id)
                     .run {
-                        cards.putAll(included.cards.associateBy { it.id })
+                        lists.putAll(
+                            included.lists
+                                .doIfDisabledListsExist { lists ->
+                                    lists.onEach { list ->
+                                        if (list.name in maybeDisabledNotificationListNames!!) {
+                                            disabledListsId.add(list.id)
+                                        }
+                                    }
+                                }
+                                .associateBy { it.id }
+                        )
+                        cards.putAll(
+                            included.cards
+                                .doIfDisabledListsExist { cards ->
+                                    cards
+                                        .filter { cardData ->
+                                            if (cardData.id in disabledCardId) {
+                                                false
+                                            } else {
+                                                if (cardData.listId in disabledListsId)
+                                                    disabledCardId.add(cardData.id)
+                                                true
+                                            }
+                                        }
+                                }
+                                .associateBy { it.id }
+                        )
+                        tasks.putAll(
+                            included.tasks
+                                .doIfDisabledListsExist { tasks ->
+                                    tasks
+                                        .filter { taskData ->
+                                            if (taskData.id in disabledTaskId) {
+                                                false
+                                            } else {
+                                                if (taskData.cardId in disabledCardId)
+                                                    disabledTaskId.add(taskData.id)
+                                                true
+                                            }
+                                        }
+                                }
+                                .associateBy { it.id }
+                        )
+
                         users.putAll(included.users.associateBy { it.id })
-                        lists.putAll(included.lists.associateBy { it.id })
-                        tasks.putAll(included.tasks.associateBy { it.id })
                     }
             }
 
@@ -108,13 +154,23 @@ class PlankaClient(
             lists = lists,
             tasks = tasks,
             actions = actions,
+            disabledListsId = disabledListsId,
         )
     }
 
     suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
-        parameter(key = "withDetails", value = true)
+        parameter(key = "withDetails", value = false)
     }.body<Actions>()
 
     suspend fun getUserData() = client.get("/api/users")
         .body<UsersData>()
+
+    private inline fun <T> List<T>.doIfDisabledListsExist(block: (List<T>) -> List<T>): List<T> =
+        this.let {
+            if (maybeDisabledNotificationListNames != null) {
+                return@let block(this)
+            }
+
+            this
+        }
 }

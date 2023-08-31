@@ -221,6 +221,7 @@ class Watcher(
                     plankaUsername = userPlankaCredentials.plankaLogin,
                     plankaPassword = userPlankaCredentials.plankaPassword,
                     plankaUrl = plankaUrl,
+                    maybeDisabledNotificationListNames = null,
                 )
 
                 notificationBoardsCache[userPlankaCredentials.telegramChatId] = client.projects()
@@ -260,7 +261,12 @@ class Watcher(
             )
 
             newDiff.diffCards[BoardAction.DELETE]?.addAll(
-                oldState.cards.values.map(CardData::id) - newState.cards.values.map(CardData::id).toSet()
+                oldState.cards.values
+                    .filter { it.listId !in newState.disabledListsId }
+                    .map(CardData::id) -
+                        newState.cards.values
+                            .map(CardData::id)
+                            .toSet()
             )
 
             newDiff.diffCards[BoardAction.MOVE]?.addAll(
