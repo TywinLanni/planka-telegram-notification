@@ -9,12 +9,16 @@ import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import tywinlanni.github.com.plankaTelegram.share.ActionId
 import tywinlanni.github.com.plankaTelegram.share.CardId
 import tywinlanni.github.com.plankaTelegram.share.ListId
 import tywinlanni.github.com.plankaTelegram.share.TaskId
+
+private val logger = LoggerFactory.getLogger(PlankaClient::class.java)
 
 class PlankaClient(
     plankaUrl: String,
@@ -87,6 +91,8 @@ class PlankaClient(
         val lists = mutableMapOf<Long, PlankaList>()
         val tasks = mutableMapOf<Long, TaskData>()
         val actions = mutableMapOf<ActionId, Action>()
+        val movedBackCards = mutableSetOf<CardId>()
+        val movedBackTasks = mutableSetOf<CardId>()
 
         projects.included.boards
             .forEach { board ->
@@ -109,7 +115,13 @@ class PlankaClient(
                                     cards
                                         .filter { cardData ->
                                             if (cardData.id in disabledCardId) {
-                                                false
+                                                if (cardData.listId !in disabledListsId) {
+                                                    disabledCardId.remove(cardData.id)
+                                                    movedBackCards.add(cardData.id)
+                                                    true
+                                                } else {
+                                                    false
+                                                }
                                             } else {
                                                 if (cardData.listId in disabledListsId)
                                                     disabledCardId.add(cardData.id)
@@ -125,7 +137,13 @@ class PlankaClient(
                                     tasks
                                         .filter { taskData ->
                                             if (taskData.id in disabledTaskId) {
-                                                false
+                                                if (taskData.cardId !in disabledCardId) {
+                                                    disabledTaskId.remove(taskData.id)
+                                                    movedBackTasks.add(taskData.id)
+                                                    true
+                                                } else {
+                                                    false
+                                                }
                                             } else {
                                                 if (taskData.cardId in disabledCardId)
                                                     disabledTaskId.add(taskData.id)
@@ -142,7 +160,7 @@ class PlankaClient(
 
         cards.keys.forEach { cardId ->
             loadCardActions(cardId)
-                .let { responseBody ->
+                ?.let { responseBody ->
                     actions.putAll(responseBody.items.associateBy { it.id })
                 }
         }
@@ -156,12 +174,22 @@ class PlankaClient(
             tasks = tasks,
             actions = actions,
             disabledListsId = disabledListsId,
+            movedBackCards = movedBackCards,
+            movedBackTasks = movedBackTasks,
         )
     }
 
     suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
         parameter(key = "withDetails", value = false)
-    }.body<Actions>()
+    }.runCatching {
+        // todo [tywin lanni 03.09.23] завести ишью (мб проблема после перемещения доски на другую доску)
+        if (status == HttpStatusCode.NotFound)
+            error("Card with id: $cardId not found")
+        body<Actions>()
+    }.onFailure {
+        // TODO: [tywin lanni 03.09.23] подумать над заведением отдельного списка с проблемными картами
+        logger.warn("For load actions from card: $cardId returns invalid answer: ${it.message}$")
+    }.getOrNull()
 
     suspend fun getUserData() = client.get("/api/users")
         .body<UsersData>()

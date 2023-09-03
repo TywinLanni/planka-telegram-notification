@@ -6,7 +6,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.slf4j.LoggerFactory
-import tywinlanni.github.com.plankaTelegram.bot.NotificationBot
+import tywinlanni.github.com.plankaTelegram.bot.TelegramBot
 import tywinlanni.github.com.plankaTelegram.db.DAO
 import tywinlanni.github.com.plankaTelegram.db.Notification
 import tywinlanni.github.com.plankaTelegram.planka.*
@@ -15,6 +15,7 @@ import tywinlanni.github.com.plankaTelegram.share.CardId
 import tywinlanni.github.com.plankaTelegram.share.TelegramChatId
 
 private val logger = LoggerFactory.getLogger(Watcher::class.java)
+
 private const val NOTIFICATION_CACHE_UPDATE_DELAY = 900_000L
 private const val PLANKA_STATE_SCAN_DELAY = 10_000L
 private const val ANTI_SPAM_DELAY = 60_000L
@@ -24,7 +25,7 @@ private const val MAGIC_COMMENT_CARD_TYPE = "commentCard"
 class Watcher(
     private val serviceClient: PlankaClient,
     private val dao: DAO,
-    private val notificationBot: NotificationBot,
+    private val notificationBot: TelegramBot,
     private val plankaUrl: String,
 ) {
     private val job = SupervisorJob()
@@ -257,7 +258,10 @@ class Watcher(
             val newDiff = StateDiff()
 
             newDiff.diffCards[BoardAction.ADD]?.addAll(
-                newState.cards.values.map(CardData::id) - oldState.cards.values.map(CardData::id).toSet()
+                newState.cards.values
+                    .map(CardData::id)
+                    .filter { it !in newState.movedBackCards }
+                    .minus(oldState.cards.values.map(CardData::id).toSet())
             )
 
             newDiff.diffCards[BoardAction.DELETE]?.addAll(
@@ -270,12 +274,15 @@ class Watcher(
             )
 
             newDiff.diffCards[BoardAction.MOVE]?.addAll(
-                newState.cards.values.filter { newCardData ->
-                    oldState.cards[newCardData.id]?.listId
-                        ?.let { oldListId ->
-                            newCardData.listId != oldListId
-                        } ?: false
-                }.map(CardData::id)
+                newState.cards.values
+                    .filter { newCardData ->
+                        oldState.cards[newCardData.id]?.listId
+                            ?.let { oldListId ->
+                                newCardData.listId != oldListId
+                            } ?: false
+                    }
+                    .map(CardData::id)
+                    .plus(newState.movedBackCards)
             )
 
             newDiff.diffCards[BoardAction.UPDATE]?.addAll(
@@ -289,7 +296,10 @@ class Watcher(
 
             // Check tasks diff
             newDiff.diffCards[BoardAction.TASK_ADD]?.addAll(
-                (newState.tasks.values.map(TaskData::id) - oldState.tasks.values.map(TaskData::id).toSet())
+                newState.tasks.values
+                    .map(TaskData::id)
+                    .filter { it !in newState.movedBackTasks }
+                    .minus(oldState.tasks.values.map(TaskData::id).toSet())
                     .mapNotNull { taskId ->
                         newState.tasks[taskId]
                             ?.let { taskData ->

@@ -18,7 +18,7 @@ class NotificationBot(
     botToken: String,
     private val dao: DAO,
     private val plankaUrl: String,
-) {
+) : TelegramBot {
     private val job = SupervisorJob()
     private val botScope = CoroutineScope(Dispatchers.IO + job)
 
@@ -31,7 +31,7 @@ class NotificationBot(
         bot.startPolling()
     }
 
-    fun sendNotification(chatId: ChatId, text: String) {
+    override suspend fun sendNotification(chatId: ChatId, text: String) {
         bot.sendMessage(
             chatId = chatId,
             text = text
