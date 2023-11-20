@@ -46,8 +46,5 @@ suspend fun main() {
         dao = dao,
         notificationBot = notificationBot,
         plankaUrl = plankaConnectionString,
-    ).apply {
-        watchJob.start()
-        notificationJob.start()
-    }
+    ).start()
 }

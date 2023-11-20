@@ -13,6 +13,7 @@ import tywinlanni.github.com.plankaTelegram.planka.*
 import tywinlanni.github.com.plankaTelegram.share.BoardId
 import tywinlanni.github.com.plankaTelegram.share.CardId
 import tywinlanni.github.com.plankaTelegram.share.TelegramChatId
+import java.util.concurrent.ConcurrentHashMap
 
 private val logger = LoggerFactory.getLogger(Watcher::class.java)
 
@@ -32,7 +33,7 @@ class Watcher(
     private val coroutineScope = CoroutineScope(Dispatchers.IO + job)
 
     private val state by lazy { State() }
-    private val diffChannel by lazy { Channel<StateDiff>() }
+    private val diffChannel by lazy { Channel<Pair<PlankaData, StateDiff>>() }
 
     private val notificationBoardsCache by lazy { mutableMapOf<TelegramChatId, Set<BoardId>>() }
     private val notificationBoardsCacheMutex by lazy { Mutex() }
@@ -40,7 +41,13 @@ class Watcher(
     private val spamProtectedCards by lazy { mutableSetOf<CardId>() }
     private val spamProtectedCardsMutex by lazy { Mutex() }
 
-    private val updateCacheJob = coroutineScope.launch {
+    fun start() {
+        updateCacheJob.start()
+        watchJob.start()
+        notificationJob.start()
+    }
+
+    private val updateCacheJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             logger.info("start update cache")
             notificationBoardsCacheMutex.withLock {
@@ -58,9 +65,9 @@ class Watcher(
         }
     }
 
-    val notificationJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
+    private val notificationJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
-            val diff = diffChannel.receive()
+            val (stateFromPlanka, diff) = diffChannel.receive()
             logger.info("start send notifications to users")
 
             notificationBoardsCacheMutex.withLock {
@@ -90,9 +97,9 @@ class Watcher(
                             .flatten()
                             .forEach { (action, cardId) ->
                                 val card = if (action == BoardAction.DELETE)
-                                    state.oldValue?.cards?.get(cardId)
+                                    state.oldValue[stateFromPlanka.board.id]?.cards?.get(cardId)
                                 else
-                                    state.value?.cards?.get(cardId)
+                                    stateFromPlanka.cards[cardId]
                                 if (card != null) {
                                     val boardId = card.boardId
 
@@ -103,7 +110,7 @@ class Watcher(
 
                                         notificationsByBoards[boardId]?.forEach forNotifications@ { notification ->
                                             if (action in notification.watchedActions) {
-                                                val maybeUser = state.value?.users?.get(card.creatorUserId)
+                                                val maybeUser = stateFromPlanka.users[card.creatorUserId]
 
                                                 if ((action == BoardAction.ADD || action == BoardAction.ADD_COMMENT)
                                                     && notification.userId == maybeUser?.id) {
@@ -115,6 +122,7 @@ class Watcher(
                                                             BoardAction.ADD -> {
                                                                 addBoardToSpamProtected(cardId)
                                                                 buildMessage(
+                                                                    state = stateFromPlanka,
                                                                     message = "Создана задача: ${card.name}\n" +
                                                                             "Пользователем: ${maybeUser?.name}\n",
                                                                     card = card,
@@ -124,6 +132,7 @@ class Watcher(
                                                             BoardAction.UPDATE -> {
                                                                 addBoardToSpamProtected(cardId)
                                                                 buildMessage(
+                                                                    state = stateFromPlanka,
                                                                     message = "Обновлена задача: ${card.name}\n",
                                                                     card = card,
                                                                 )
@@ -131,18 +140,21 @@ class Watcher(
 
                                                             BoardAction.MOVE ->
                                                                 buildMessage(
+                                                                    state = stateFromPlanka,
                                                                     message = "Задача: ${card.name}, была перемещена. " +
                                                                             "Новая позиция:\n",
                                                                     card = card,
                                                                 )
 
                                                             BoardAction.DELETE -> buildMessage(
+                                                                state = stateFromPlanka,
                                                                 message = "Удалена задача: ${card.name}\n",
                                                                 card = card,
                                                             )
 
                                                             BoardAction.TASK_ADD -> {
                                                                 buildMessage(
+                                                                    state = stateFromPlanka,
                                                                     message = "Добавлены новые подзадачи в задачу: ${card.name}:\n" +
                                                                             diff.addedTasks[cardId]
                                                                                 ?.joinToString("\n") { it.name } + "\n\n",
@@ -151,6 +163,7 @@ class Watcher(
                                                             }
 
                                                             BoardAction.TASK_REMOVE -> buildMessage(
+                                                                state = stateFromPlanka,
                                                                 message = "Из задачи: ${card.name} удалены подзадачи:\n" +
                                                                         diff.removedTasks[cardId]
                                                                             ?.joinToString("\n") { it.name } + "\n\n",
@@ -158,6 +171,7 @@ class Watcher(
                                                             )
 
                                                             BoardAction.TASK_COMPLETE -> buildMessage(
+                                                                state = stateFromPlanka,
                                                                 message = "В задаче: ${card.name}" +
                                                                         " следующие подзадачи отмечены как выполненые:\n" +
                                                                         diff.completedTasks[cardId]
@@ -166,6 +180,7 @@ class Watcher(
                                                             )
 
                                                             BoardAction.ADD_COMMENT -> buildMessage(
+                                                                state = stateFromPlanka,
                                                                 message = "В задаче: ${card.name} новые коментарии:\n" +
                                                                         diff.updatedComments[cardId]
                                                                             ?.joinToString("\n") {
@@ -189,9 +204,9 @@ class Watcher(
         }
     }
 
-    private fun buildMessage(message: String, card: CardData) = message +
-            "Колонка: ${state.value?.lists?.get(card.listId)?.name}\n" +
-            "Доска: ${state.value?.boards?.get(card.boardId)?.name}\n"
+    private fun buildMessage(state: PlankaData, message: String, card: CardData) = message +
+            "Колонка: ${state.lists[card.listId]?.name}\n" +
+            "Доска: ${state.board.name}\n"
 
     private fun addBoardToSpamProtected(boardId: BoardId) {
         spamProtectedCards.add(boardId)
@@ -205,12 +220,28 @@ class Watcher(
         }
     }
 
-    val watchJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
+    private val watchJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             logger.info("start check planka state")
-            state.setNewState(serviceClient.loadPlankaState())
-            logger.info("end check planka state")
+            val projects = serviceClient.projects()
 
+            projects
+                .items
+                .forEach { project ->
+                    projects
+                        .included
+                        .boards
+                        .filter { it.projectId == project.id }
+                        .forEach { board ->
+                            logger.info("Send notification for board: ${board.name}")
+                            state.setNewState(
+                                boardId = board.id,
+                                newState = serviceClient.loadPlankaStateForBoard(project, boardId = board.id)
+                            )
+                        }
+                }
+
+            logger.info("end check planka state")
             delay(PLANKA_STATE_SCAN_DELAY)
         }
     }
@@ -234,25 +265,22 @@ class Watcher(
     }
 
     inner class State {
-        var value: PlankaData? = null
+        var oldValue: ConcurrentHashMap<BoardId, PlankaData?> = ConcurrentHashMap()
             private set
 
-        var oldValue: PlankaData? = null
-            private set
-
-        suspend fun setNewState(newState: PlankaData) {
-            if (value == null) {
-                value = newState
+        suspend fun setNewState(boardId: BoardId, newState: PlankaData) {
+            if (oldValue[boardId] == null) {
+                oldValue[boardId] = newState
                 return
             }
-            findDiff(newState)
 
-            oldValue = value
-            value = newState
+            findDiff(boardId, newState)
+
+            oldValue[boardId] = newState
         }
 
-        private suspend fun findDiff(newState: PlankaData) {
-            val oldState = value
+        private suspend fun findDiff(boardId: BoardId, newState: PlankaData) {
+            val oldState = oldValue[boardId]
             require(oldState != null)
 
             val newDiff = StateDiff()
@@ -361,7 +389,7 @@ class Watcher(
             if (newDiff.diffCards.values.flatten().isEmpty())
                 return
 
-            diffChannel.send(newDiff)
+            diffChannel.send(newState to newDiff)
         }
     }
 

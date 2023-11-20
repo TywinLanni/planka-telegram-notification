@@ -74,6 +74,9 @@ class PlankaClient(
                 tokenBuffer.add(
                     BearerTokens(accessToken = token.item, refreshToken = "")
                 )
+
+                if (tokenBuffer.size > 5)
+                    tokenBuffer.removeFirst()
             }
     }
 
@@ -83,9 +86,7 @@ class PlankaClient(
     suspend fun loadBoardData(boardId: Long) = client.get("/api/boards/$boardId")
         .body<BoardResponse>()
 
-    suspend fun loadPlankaState(): PlankaData {
-        val projects = projects()
-
+    suspend fun loadPlankaStateForBoard(project: Project, boardId: Long): PlankaData {
         val cards = mutableMapOf<Long, CardData>()
         val users = mutableMapOf<Long, UserData>()
         val lists = mutableMapOf<Long, PlankaList>()
@@ -94,68 +95,65 @@ class PlankaClient(
         val movedBackCards = mutableSetOf<CardId>()
         val movedBackTasks = mutableSetOf<CardId>()
 
-        projects.included.boards
-            .forEach { board ->
-                loadBoardData(board.id)
-                    .run {
-                        lists.putAll(
-                            included.lists
-                                .doIfDisabledListsExist { lists ->
-                                    lists.onEach { list ->
-                                        if (list.name in maybeDisabledNotificationListNames!!) {
-                                            disabledListsId.add(list.id)
+        val board = loadBoardData(boardId)
+            .apply {
+                lists.putAll(
+                    included.lists
+                        .doIfDisabledListsExist { lists ->
+                            lists.onEach { list ->
+                                if (list.name in maybeDisabledNotificationListNames!!) {
+                                    disabledListsId.add(list.id)
+                                }
+                            }
+                        }
+                        .associateBy { it.id }
+                )
+                cards.putAll(
+                    included.cards
+                        .doIfDisabledListsExist { cards ->
+                            cards
+                                .filter { cardData ->
+                                    if (cardData.id in disabledCardId) {
+                                        if (cardData.listId !in disabledListsId) {
+                                            disabledCardId.remove(cardData.id)
+                                            movedBackCards.add(cardData.id)
+                                            true
+                                        } else {
+                                            false
                                         }
+                                    } else {
+                                        if (cardData.listId in disabledListsId)
+                                            disabledCardId.add(cardData.id)
+                                        true
                                     }
                                 }
-                                .associateBy { it.id }
-                        )
-                        cards.putAll(
-                            included.cards
-                                .doIfDisabledListsExist { cards ->
-                                    cards
-                                        .filter { cardData ->
-                                            if (cardData.id in disabledCardId) {
-                                                if (cardData.listId !in disabledListsId) {
-                                                    disabledCardId.remove(cardData.id)
-                                                    movedBackCards.add(cardData.id)
-                                                    true
-                                                } else {
-                                                    false
-                                                }
-                                            } else {
-                                                if (cardData.listId in disabledListsId)
-                                                    disabledCardId.add(cardData.id)
-                                                true
-                                            }
+                        }
+                        .associateBy { it.id }
+                )
+                tasks.putAll(
+                    included.tasks
+                        .doIfDisabledListsExist { tasks ->
+                            tasks
+                                .filter { taskData ->
+                                    if (taskData.id in disabledTaskId) {
+                                        if (taskData.cardId !in disabledCardId) {
+                                            disabledTaskId.remove(taskData.id)
+                                            movedBackTasks.add(taskData.id)
+                                            true
+                                        } else {
+                                            false
                                         }
+                                    } else {
+                                        if (taskData.cardId in disabledCardId)
+                                            disabledTaskId.add(taskData.id)
+                                        true
+                                    }
                                 }
-                                .associateBy { it.id }
-                        )
-                        tasks.putAll(
-                            included.tasks
-                                .doIfDisabledListsExist { tasks ->
-                                    tasks
-                                        .filter { taskData ->
-                                            if (taskData.id in disabledTaskId) {
-                                                if (taskData.cardId !in disabledCardId) {
-                                                    disabledTaskId.remove(taskData.id)
-                                                    movedBackTasks.add(taskData.id)
-                                                    true
-                                                } else {
-                                                    false
-                                                }
-                                            } else {
-                                                if (taskData.cardId in disabledCardId)
-                                                    disabledTaskId.add(taskData.id)
-                                                true
-                                            }
-                                        }
-                                }
-                                .associateBy { it.id }
-                        )
+                        }
+                        .associateBy { it.id }
+                )
 
-                        users.putAll(included.users.associateBy { it.id })
-                    }
+                users.putAll(included.users.associateBy { it.id })
             }
 
         cards.keys.forEach { cardId ->
@@ -166,8 +164,8 @@ class PlankaClient(
         }
 
         return PlankaData(
-            projects = projects.items.associateBy { it.id },
-            boards = projects.included.boards.associateBy { it.id },
+            project = project,
+            board = board.item,
             cards = cards,
             users = users,
             lists = lists,
