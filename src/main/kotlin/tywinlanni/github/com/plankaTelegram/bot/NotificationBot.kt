@@ -20,7 +20,8 @@ class NotificationBot(
     private val plankaUrl: String,
 ) : TelegramBot {
     private val job = SupervisorJob()
-    private val botScope = CoroutineScope(Dispatchers.IO + job)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val botScope = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + job)
 
     private val bot = bot {
         token = botToken
