@@ -1,20 +1,18 @@
-val ktor_version: String by project
-val kotlin_version: String by project
-val logback_version: String by project
-val kmongo_version: String by project
-val telegram_bot_version: String by project
-
 plugins {
-    kotlin("jvm") version "1.9.0"
-    kotlin("plugin.serialization") version "1.9.0"
-    id("io.ktor.plugin") version "2.3.3"
+    alias(libs.plugins.kotlin)
+    alias(libs.plugins.ktor)
+    kotlin("plugin.serialization") version "1.9.22"
 }
 
 group = "tywinlanni.github.com"
-version = "0.0.5"
+version = "0.0.6"
 
 application {
     mainClass.set("tywinlanni.github.com.plankaTelegram.MainKt")
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 repositories {
@@ -23,19 +21,20 @@ repositories {
 }
 
 dependencies {
-    implementation("io.ktor:ktor-client-core-jvm")
-    implementation("io.ktor:ktor-client-cio-jvm")
-    implementation("io.ktor:ktor-client-auth")
-    implementation("io.ktor:ktor-client-logging")
-    implementation("io.ktor:ktor-client-content-negotiation")
-    implementation("io.ktor:ktor-serialization-kotlinx-json")
-    implementation("io.ktor:ktor-client-serialization")
+    implementation(libs.ktor.client.core.jvm)
+    implementation(libs.ktor.client.cio.jvm)
+    implementation(libs.ktor.client.auth)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.client.logging)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.client.serialization)
 
-    implementation("ch.qos.logback:logback-classic:$logback_version")
+    implementation(libs.logback.classic)
 
-    implementation("io.github.kotlin-telegram-bot.kotlin-telegram-bot:telegram:$telegram_bot_version")
+    implementation(libs.telegram.bot)
 
-    implementation("org.litote.kmongo:kmongo-coroutine:$kmongo_version")
+    implementation(libs.mongodb.driver.kotlin.coroutine)
+    implementation(libs.mongodb.bson.kotlinx)
 
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+    testImplementation(libs.kotlin.test.junit)
 }
