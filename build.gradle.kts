@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.ktor)
-    kotlin("plugin.serialization") version "1.9.22"
+    kotlin("plugin.serialization") version libs.versions.kotlin
 }
 
 group = "tywinlanni.github.com"
@@ -37,4 +37,14 @@ dependencies {
     implementation(libs.mongodb.bson.kotlinx)
 
     testImplementation(libs.kotlin.test.junit)
+}
+
+tasks.jar {
+    manifest.attributes["Main-Class"] = "tywinlanni.github.com.plankaTelegram.MainKt"
+    val dependencies = configurations
+        .runtimeClasspath
+        .get()
+        .map(::zipTree)
+    from(dependencies)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

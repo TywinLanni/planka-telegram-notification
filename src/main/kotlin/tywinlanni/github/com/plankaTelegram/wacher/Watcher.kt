@@ -31,8 +31,7 @@ class Watcher(
     private val plankaUrl: String,
 ) {
     private val job = SupervisorJob()
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val coroutineScope = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + job)
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + job)
 
     private val state by lazy { State() }
     private val diffChannel by lazy { Channel<Pair<PlankaData, StateDiff>>() }

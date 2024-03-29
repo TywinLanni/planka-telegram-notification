@@ -186,7 +186,7 @@ class PlankaClient(
         body<Actions>()
     }.onFailure {
         // TODO: [tywin lanni 03.09.23] подумать над заведением отдельного списка с проблемными картами
-        logger.warn("For load actions from card: $cardId returns invalid answer: ${it.message}$")
+        logger.debug("For load actions from card: $cardId returns invalid answer: ${it.message}$")
     }.getOrNull()
 
     suspend fun getUserData() = client.get("/api/users")
