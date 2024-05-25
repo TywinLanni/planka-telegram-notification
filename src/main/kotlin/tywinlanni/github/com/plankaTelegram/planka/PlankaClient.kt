@@ -30,6 +30,7 @@ class PlankaClient(
 
     private val disabledListsId by lazy { mutableSetOf<ListId>() }
     private val disabledCardId by lazy { mutableSetOf<CardId>() }
+    private val invalidCardId by lazy { mutableSetOf<CardId>() }
     private val disabledTaskId by lazy { mutableSetOf<TaskId>() }
 
     private val client = HttpClient(CIO) {
@@ -80,13 +81,17 @@ class PlankaClient(
             }
     }
 
-    suspend fun projects() = client.get("/api/projects")
-        .body<Projects>()
+    suspend fun projects(): Projects? =
+        runCatching {
+            client.get("/api/projects")
+                .body<Projects>()
+        }.getOrNull()
 
-    suspend fun loadBoardData(boardId: Long) = client.get("/api/boards/$boardId")
+
+    private suspend fun loadBoardData(boardId: Long) = client.get("/api/boards/$boardId")
         .body<BoardResponse>()
 
-    suspend fun loadPlankaStateForBoard(project: Project, boardId: Long): PlankaData {
+    suspend fun loadPlankaStateForBoard(project: Project, boardId: Long): PlankaData? = runCatching {
         val cards = mutableMapOf<Long, CardData>()
         val users = mutableMapOf<Long, UserData>()
         val lists = mutableMapOf<Long, PlankaList>()
@@ -128,6 +133,7 @@ class PlankaClient(
                                     }
                                 }
                         }
+                        .filter { it.id !in invalidCardId }
                         .associateBy { it.id }
                 )
                 tasks.putAll(
@@ -175,9 +181,9 @@ class PlankaClient(
             movedBackCards = movedBackCards,
             movedBackTasks = movedBackTasks,
         )
-    }
+    }.getOrNull()
 
-    suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
+    private suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
         parameter(key = "withDetails", value = false)
     }.runCatching {
         // todo [tywin lanni 03.09.23] завести ишью (мб проблема после перемещения доски на другую доску)
@@ -187,10 +193,14 @@ class PlankaClient(
     }.onFailure {
         // TODO: [tywin lanni 03.09.23] подумать над заведением отдельного списка с проблемными картами
         logger.debug("For load actions from card: $cardId returns invalid answer: ${it.message}$")
+        invalidCardId.add(cardId)
     }.getOrNull()
 
-    suspend fun getUserData() = client.get("/api/users")
-        .body<UsersData>()
+    suspend fun getUserData() = runCatching {
+        client.get("/api/users")
+            .body<UsersData>()
+    }.getOrNull()
+
 
     private inline fun <T> List<T>.doIfDisabledListsExist(block: (List<T>) -> List<T>): List<T> =
         this.let {

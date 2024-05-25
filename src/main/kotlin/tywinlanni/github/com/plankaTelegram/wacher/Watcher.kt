@@ -49,7 +49,7 @@ class Watcher(
 
     private val updateCacheJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
-            logger.info("start update cache")
+            logger.info("Start update cache")
             notificationBoardsCacheMutex.withLock {
                 notificationBoardsCache.clear()
 
@@ -59,7 +59,7 @@ class Watcher(
                         addAvailablePlankaBoardsToCache(telegramChatId)
                     }
             }
-            logger.info("end update cache")
+            logger.info("End update cache")
 
             delay(NOTIFICATION_CACHE_UPDATE_DELAY)
         }
@@ -68,7 +68,7 @@ class Watcher(
     private val notificationJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             val (stateFromPlanka, diff) = diffChannel.receive()
-            logger.info("start send notifications to users")
+            logger.info("Start send notifications to users")
 
             notificationBoardsCacheMutex.withLock {
                 val allWatchedBoards = notificationBoardsCache
@@ -198,7 +198,7 @@ class Watcher(
                     }
             }
 
-            logger.info("end send notifications to users")
+            logger.info("End send notifications to users")
         }
     }
 
@@ -218,27 +218,29 @@ class Watcher(
 
     private val watchJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
-            logger.info("start check planka state")
+            logger.info("Start check planka state")
             val projects = serviceClient.projects()
 
             projects
-                .items
-                .forEach { project ->
+                ?.items
+                ?.forEach { project ->
                     projects
                         .included
                         .boards
                         .filter { it.projectId == project.id }
                         .forEach { board ->
-                            logger.info("Send notification for board: ${board.name}")
-                            state.setNewState(
-                                boardId = board.id,
-                                newState = serviceClient.loadPlankaStateForBoard(project, boardId = board.id)
-                            )
+                            serviceClient.loadPlankaStateForBoard(project, boardId = board.id)
+                                ?.let {
+                                    logger.info("Send notification for board: ${board.name}")
+                                    state.setNewState(
+                                        boardId = board.id,
+                                        newState = it
+                                    )
+                                } ?: logger.warn("Cannot find planka state for ${board.name}")
                         }
-                }
+                } ?: logger.warn("Can't load projects from planka")
 
-            logger.info(job.children.count().toString() + " value job children")
-            logger.info("end check planka state")
+            logger.info("End check planka state")
             delay(PLANKA_STATE_SCAN_DELAY)
         }
     }
@@ -254,10 +256,11 @@ class Watcher(
                 )
 
                 notificationBoardsCache[userPlankaCredentials.telegramChatId] = client.projects()
-                    .included
-                    .boards
-                    .map(Board::id)
-                    .toSet()
+                    ?.included
+                    ?.boards
+                    ?.map(Board::id)
+                    ?.toSet()
+                    ?: emptySet()
             } ?: logger.warn("Telegram chat: $telegramChatId accept notification but don't have a planka credentials")
     }
 

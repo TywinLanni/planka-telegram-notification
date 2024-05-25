@@ -109,8 +109,8 @@ class NotificationBot(
                         plankaPassword = credentials.plankaPassword,
                         maybeDisabledNotificationListNames = null,
                     ).getUserData()
-                        .items
-                        .find { it.username == credentials.plankaLogin || it.email == credentials.plankaLogin }
+                        ?.items
+                        ?.find { it.username == credentials.plankaLogin || it.email == credentials.plankaLogin }
                         ?.id
                         ?: return@launch
 
