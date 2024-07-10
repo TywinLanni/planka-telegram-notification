@@ -2,7 +2,7 @@ package tywinlanni.github.com.plankaTelegram.planka
 
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.java.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
@@ -26,26 +26,19 @@ class PlankaClient(
     private val plankaPassword: String,
     private val maybeDisabledNotificationListNames: List<String>?,
 ) {
-    private val tokenBuffer = mutableListOf<BearerTokens>()
+    private val tokenBuffer = arrayListOf<BearerTokens>().apply {
+        ensureCapacity(5)
+    }
 
-    private val disabledListsId by lazy { mutableSetOf<ListId>() }
-    private val disabledCardId by lazy { mutableSetOf<CardId>() }
-    private val invalidCardId by lazy { mutableSetOf<CardId>() }
-    private val disabledTaskId by lazy { mutableSetOf<TaskId>() }
+    private val disabledListsId by lazy { hashSetOf<ListId>() }
+    private val disabledCardId by lazy { hashSetOf<CardId>() }
+    private val invalidCardId by lazy { hashSetOf<CardId>() }
+    private val disabledTaskId by lazy { hashSetOf<TaskId>() }
 
-    private val client = HttpClient(CIO) {
+    private val client = HttpClient(Java) {
         defaultRequest {
             url(plankaUrl)
         }
-        install(HttpRequestRetry) {
-            retryOnServerErrors(maxRetries = 3)
-            retryOnException(maxRetries = 3, retryOnTimeout = true)
-
-            delayMillis {
-                3000L
-            }
-        }
-        //install(Logging) { level = LogLevel.INFO }
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
@@ -54,7 +47,9 @@ class PlankaClient(
             })
         }
         install(HttpTimeout) {
-            connectTimeoutMillis = 30_000
+            connectTimeoutMillis = 2_000
+            socketTimeoutMillis = 2_000
+            requestTimeoutMillis = 2_000
         }
         install(Auth) {
             bearer {
@@ -62,6 +57,8 @@ class PlankaClient(
                     login()
                     tokenBuffer.last()
                 }
+
+                sendWithoutRequest { true }
             }
         }
     }
@@ -86,7 +83,6 @@ class PlankaClient(
             client.get("/api/projects")
                 .body<Projects>()
         }.getOrNull()
-
 
     private suspend fun loadBoardData(boardId: Long) = client.get("/api/boards/$boardId")
         .body<BoardResponse>()
@@ -162,6 +158,7 @@ class PlankaClient(
                 users.putAll(included.users.associateBy { it.id })
             }
 
+        // TODO do it as parallel job
         cards.keys.forEach { cardId ->
             loadCardActions(cardId)
                 ?.let { responseBody ->
@@ -181,7 +178,10 @@ class PlankaClient(
             movedBackCards = movedBackCards,
             movedBackTasks = movedBackTasks,
         )
-    }.getOrNull()
+    }.getOrElse {
+        logger.error(it.stackTraceToString())
+        null
+    }
 
     private suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
         parameter(key = "withDetails", value = false)

@@ -7,7 +7,10 @@ import com.github.kotlintelegrambot.dispatcher.command
 import com.github.kotlintelegrambot.dispatcher.text
 import com.github.kotlintelegrambot.entities.ChatId
 import com.mongodb.MongoWriteException
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import tywinlanni.github.com.plankaTelegram.db.DAO
 import tywinlanni.github.com.plankaTelegram.db.Notification
 import tywinlanni.github.com.plankaTelegram.db.UserPlankaCredentials
@@ -20,8 +23,7 @@ class NotificationBot(
     private val plankaUrl: String,
 ) : TelegramBot {
     private val job = SupervisorJob()
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val botScope = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + job)
+    private val botScope = CoroutineScope(Dispatchers.IO + job)
 
     private val bot = bot {
         token = botToken

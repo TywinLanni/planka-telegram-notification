@@ -1,14 +1,16 @@
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.ktor)
-    kotlin("plugin.serialization") version libs.versions.kotlin
+    alias(libs.plugins.serialization)
 }
 
 group = "tywinlanni.github.com"
-version = "0.0.7"
+version = "0.1.0"
+
+val plankaMainClass = "tywinlanni.github.com.plankaTelegram.MainKt"
 
 application {
-    mainClass.set("tywinlanni.github.com.plankaTelegram.MainKt")
+    mainClass.set(plankaMainClass)
 }
 
 kotlin {
@@ -22,7 +24,7 @@ repositories {
 
 dependencies {
     implementation(libs.ktor.client.core.jvm)
-    implementation(libs.ktor.client.cio.jvm)
+    implementation(libs.ktor.client.java)
     implementation(libs.ktor.client.auth)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.client.logging)
@@ -40,7 +42,9 @@ dependencies {
 }
 
 tasks.jar {
-    manifest.attributes["Main-Class"] = "tywinlanni.github.com.plankaTelegram.MainKt"
+    manifest.attributes["Main-Class"] = plankaMainClass
+
+    archiveFileName = "planka-telegram-notification.jar"
     val dependencies = configurations
         .runtimeClasspath
         .get()

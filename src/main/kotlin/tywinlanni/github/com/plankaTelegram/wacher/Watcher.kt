@@ -49,7 +49,7 @@ class Watcher(
 
     private val updateCacheJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
-            logger.info("Start update cache")
+            logger.debug("Start update cache")
             notificationBoardsCacheMutex.withLock {
                 notificationBoardsCache.clear()
 
@@ -59,7 +59,7 @@ class Watcher(
                         addAvailablePlankaBoardsToCache(telegramChatId)
                     }
             }
-            logger.info("End update cache")
+            logger.debug("End update cache")
 
             delay(NOTIFICATION_CACHE_UPDATE_DELAY)
         }
@@ -68,7 +68,7 @@ class Watcher(
     private val notificationJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             val (stateFromPlanka, diff) = diffChannel.receive()
-            logger.info("Start send notifications to users")
+            logger.debug("Start send notifications to users")
 
             notificationBoardsCacheMutex.withLock {
                 val allWatchedBoards = notificationBoardsCache
@@ -198,7 +198,7 @@ class Watcher(
                     }
             }
 
-            logger.info("End send notifications to users")
+            logger.debug("End send notifications to users")
         }
     }
 
@@ -231,11 +231,12 @@ class Watcher(
                         .forEach { board ->
                             serviceClient.loadPlankaStateForBoard(project, boardId = board.id)
                                 ?.let {
-                                    logger.info("Send notification for board: ${board.name}")
+                                    logger.info("Start update state for board: ${board.name}")
                                     state.setNewState(
                                         boardId = board.id,
                                         newState = it
                                     )
+                                    logger.info("End update state for board: ${board.name}")
                                 } ?: logger.warn("Cannot find planka state for ${board.name}")
                         }
                 } ?: logger.warn("Can't load projects from planka")
