@@ -1,6 +1,6 @@
 [versions]
 kotlin = "1.9.22"
-ktor="2.3.8"
+ktor="2.3.12"
 logback="1.4.12"
 kmongo="4.11.0"
 telegramBot="6.1.0"

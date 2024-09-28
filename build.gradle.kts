@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "tywinlanni.github.com"
-version = "0.1.0"
+version = "0.1.1"
 
 val plankaMainClass = "tywinlanni.github.com.plankaTelegram.MainKt"
 
