@@ -7,7 +7,7 @@ telegramBot="6.1.0"
 
 [libraries]
 ktor-client-core-jvm = { module = "io.ktor:ktor-client-core-jvm" }
-ktor-client-java = { module = "io.ktor:ktor-client-java" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp-jvm" }
 ktor-client-auth = { module = "io.ktor:ktor-client-auth" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation" }

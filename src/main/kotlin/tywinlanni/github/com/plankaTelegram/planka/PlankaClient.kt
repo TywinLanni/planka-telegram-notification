@@ -2,7 +2,7 @@ package tywinlanni.github.com.plankaTelegram.planka
 
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.engine.java.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
@@ -35,7 +35,7 @@ class PlankaClient(
     private val invalidCardId by lazy { hashSetOf<CardId>() }
     private val disabledTaskId by lazy { hashSetOf<TaskId>() }
 
-    private val client = HttpClient(Java) {
+    private val client = HttpClient(OkHttp) {
         defaultRequest {
             url(plankaUrl)
         }

@@ -15,6 +15,7 @@ import tywinlanni.github.com.plankaTelegram.share.BoardId
 import tywinlanni.github.com.plankaTelegram.share.CardId
 import tywinlanni.github.com.plankaTelegram.share.TelegramChatId
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = LoggerFactory.getLogger(Watcher::class.java)
 
@@ -216,10 +217,21 @@ class Watcher(
         }
     }
 
+    val threadCount = AtomicInteger(Thread.activeCount())
+
     private val watchJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             logger.info("Start check planka state")
             val projects = serviceClient.projects()
+
+            val tc = Thread.activeCount()
+            val was = threadCount.get()
+
+            if (tc > was) {
+                logger.warn("Total thread count change. Was - $was, Now - $tc")
+            }
+
+            threadCount.set(tc)
 
             projects
                 ?.items
@@ -237,11 +249,12 @@ class Watcher(
                                         newState = it
                                     )
                                     logger.info("End update state for board: ${board.name}")
-                                } ?: logger.warn("Cannot find planka state for ${board.name}")
+                                } ?: logger.error("Cannot find planka state for ${board.name}")
                         }
-                } ?: logger.warn("Can't load projects from planka")
+                } ?: logger.error("Can't load projects from planka")
 
             logger.info("End check planka state")
+
             delay(PLANKA_STATE_SCAN_DELAY)
         }
     }

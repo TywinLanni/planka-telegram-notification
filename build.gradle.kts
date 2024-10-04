@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "tywinlanni.github.com"
-version = "0.1.1"
+version = "0.1.2"
 
 val plankaMainClass = "tywinlanni.github.com.plankaTelegram.MainKt"
 
@@ -24,7 +24,7 @@ repositories {
 
 dependencies {
     implementation(libs.ktor.client.core.jvm)
-    implementation(libs.ktor.client.java)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.auth)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.client.logging)
