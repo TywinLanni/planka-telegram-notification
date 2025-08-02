@@ -1,9 +1,9 @@
 [versions]
-kotlin = "1.9.22"
-ktor="2.3.12"
-logback="1.4.12"
+kotlin = "2.1.0"
+ktor="3.2.3"
+logback="1.5.13"
 kmongo="4.11.0"
-telegramBot="6.1.0"
+tg-bot="0.13.2"
 
 [libraries]
 ktor-client-core-jvm = { module = "io.ktor:ktor-client-core-jvm" }
@@ -14,8 +14,8 @@ ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negoti
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json" }
 ktor-client-serialization = { module = "io.ktor:ktor-client-serialization" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
-telegram-bot = { module = "io.github.kotlin-telegram-bot.kotlin-telegram-bot:telegram", version.ref = "telegramBot" }
 mongodb-driver-kotlin-coroutine = { module = "org.mongodb:mongodb-driver-kotlin-coroutine", version.ref = "kmongo" }
+telegram-bot-core = { module = "io.github.dehuckakpyt.telegrambot:telegram-bot-core", version.ref = "tg-bot" }
 mongodb-bson-kotlinx = { module = "org.mongodb:bson-kotlinx", version.ref = "kmongo" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 

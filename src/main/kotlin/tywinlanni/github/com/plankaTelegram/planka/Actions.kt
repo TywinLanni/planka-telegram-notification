@@ -16,10 +16,4 @@ data class Action(
     val cardId: CardId,
     val userId: UserId,
     val type: String,
-    val data: ActionData,
-)
-
-@Serializable
-data class ActionData(
-    val text: String,
 )

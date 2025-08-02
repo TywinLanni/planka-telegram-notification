@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "tywinlanni.github.com"
-version = "0.1.2"
+version = "0.2.0"
 
 val plankaMainClass = "tywinlanni.github.com.plankaTelegram.MainKt"
 
@@ -33,7 +33,7 @@ dependencies {
 
     implementation(libs.logback.classic)
 
-    implementation(libs.telegram.bot)
+    implementation(libs.telegram.bot.core)
 
     implementation(libs.mongodb.driver.kotlin.coroutine)
     implementation(libs.mongodb.bson.kotlinx)

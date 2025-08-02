@@ -13,11 +13,11 @@ This is a telegram bot that uses the planka api to send card change to telegram.
 3. Clone this repo
 4. Create docker image
 ```bash
-docker build -t tywinlanni/planka-notification-bot:0.1.1 .
+docker build -t tywinlanni/planka-notification-bot:0.2.0 .
 ```
 
 ```bash
-docker image push tywinlanni/planka-notification-bot:0.1.1
+docker image push tywinlanni/planka-notification-bot:0.2.0
 ```
 
 ## Run
@@ -38,4 +38,5 @@ docker start bot
 - `MONGO_CONNECTION_STRING` - mongo db connection string (default `mongodb://localhost`)
 - `DATABASE_NAME` - mongo database name (default `Planka`)
 - `TELEGRAM_BOT_TOKEN` - telegram bot token
+- `TELEGRAM_BOT_NAME` - telegram bot name
 - `DISABLED_PLANKA_LIST_NAMES` - specific list to disable notification comma separated (improve bot speed) not require

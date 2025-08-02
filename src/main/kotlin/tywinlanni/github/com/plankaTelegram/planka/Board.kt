@@ -14,6 +14,7 @@ data class BoardIncluded(
     val lists: List<PlankaList>,
     val cards: List<CardData>,
     val users: List<UserData>,
+    val taskLists: List<TaskList>,
     val tasks: List<TaskData>,
 )
 
@@ -21,7 +22,14 @@ data class BoardIncluded(
 data class PlankaList(
     val id: ListId,
     val boardId: BoardId,
-    val name: String,
+    val name: String?,
+)
+
+@Serializable
+data class TaskList(
+    val id: ListId,
+    val cardId: CardId,
+    val name: String?,
 )
 
 @Serializable
@@ -38,7 +46,7 @@ data class CardData(
 data class TaskData(
     val name: String,
     val id: TaskId,
-    val cardId: CardId,
+    val taskListId: CardId,
     val isCompleted: Boolean,
 )
 
@@ -46,6 +54,5 @@ data class TaskData(
 data class UserData(
     val name: String,
     val username: String?,
-    val email: String,
     val id: UserId,
 )

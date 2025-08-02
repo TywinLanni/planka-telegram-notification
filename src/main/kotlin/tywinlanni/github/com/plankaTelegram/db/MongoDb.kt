@@ -2,7 +2,7 @@ package tywinlanni.github.com.plankaTelegram.db
 
 import com.mongodb.client.model.*
 import com.mongodb.kotlin.client.coroutine.MongoClient
-import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import tywinlanni.github.com.plankaTelegram.share.TelegramChatId
 
@@ -49,7 +49,7 @@ class MongoDb(
     override suspend fun getCredentialsByTelegramId(telegramChatId: TelegramChatId) =
         userPlankaCredentialsCollection
             .find(Filters.eq(UserPlankaCredentials::telegramChatId.name, telegramChatId))
-            .single()
+            .singleOrNull()
 
     override suspend fun deletePlankaCredentials(telegramChatId: TelegramChatId) {
         userPlankaCredentialsCollection.deleteOne(Filters.eq(UserPlankaCredentials::telegramChatId.name, telegramChatId))

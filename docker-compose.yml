@@ -1,0 +1,33 @@
+services:
+  planka-notification-bot:
+    container_name: bot
+    image: tywinlanni/planka-notification-bot:0.2.0
+    environment:
+      - PLANKA_CONNECTION_STRING=https://my.domain.ru
+      - PLANKA_SERVICE_USERNAME=asd@gmail.com
+      - PLANKA_SERVICE_PASSWORD=****
+      - MONGO_CONNECTION_STRING=mongodb://mongo:27017
+      - DATABASE_NAME=Planka
+      - TELEGRAM_BOT_TOKEN=****
+      - TELEGRAM_BOT_NAME=@my_bot
+      - DISABLED_PLANKA_LIST_NAMES=Завершенные,Выложено
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"  # Оставляем для доступа с хоста, если нужно
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

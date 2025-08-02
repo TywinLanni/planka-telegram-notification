@@ -15,6 +15,7 @@ suspend fun main() {
     val databaseName = System.getenv("DATABASE_NAME") ?: "Planka"
 
     val telegramBotToken = System.getenv("TELEGRAM_BOT_TOKEN")
+    val telegramBotName = System.getenv("TELEGRAM_BOT_NAME")
 
     val maybeDisabledNotificationListNames = System.getenv("DISABLED_PLANKA_LIST_NAMES")
         ?.split(",")
@@ -35,8 +36,9 @@ suspend fun main() {
 
     val notificationBot = NotificationBot(
         botToken = telegramBotToken,
+        botName = telegramBotName,
         dao = dao,
-        plankaUrl = plankaConnectionString,
+        plankaClient = client,
     ).apply {
         startPolling()
     }

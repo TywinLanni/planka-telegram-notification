@@ -1,16 +1,10 @@
 package tywinlanni.github.com.plankaTelegram.bot
 
-import com.github.kotlintelegrambot.Bot
-import com.github.kotlintelegrambot.bot
-import com.github.kotlintelegrambot.dispatch
-import com.github.kotlintelegrambot.dispatcher.command
-import com.github.kotlintelegrambot.dispatcher.text
-import com.github.kotlintelegrambot.entities.ChatId
 import com.mongodb.MongoWriteException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import io.github.dehuckakpyt.telegrambot.config.TelegramBotConfig
+import io.github.dehuckakpyt.telegrambot.ext.config.receiver.handling
+import io.github.dehuckakpyt.telegrambot.factory.TelegramBotFactory
+import io.github.dehuckakpyt.telegrambot.handling.BotHandling
 import tywinlanni.github.com.plankaTelegram.db.DAO
 import tywinlanni.github.com.plankaTelegram.db.Notification
 import tywinlanni.github.com.plankaTelegram.db.UserPlankaCredentials
@@ -18,145 +12,117 @@ import tywinlanni.github.com.plankaTelegram.planka.PlankaClient
 import tywinlanni.github.com.plankaTelegram.wacher.Watcher
 
 class NotificationBot(
-    botToken: String,
+    private val botToken: String,
+    private val botName: String,
     private val dao: DAO,
-    private val plankaUrl: String,
+    private val plankaClient: PlankaClient,
 ) : TelegramBot {
-    private val job = SupervisorJob()
-    private val botScope = CoroutineScope(Dispatchers.IO + job)
-
-    private val bot = bot {
+    val config = TelegramBotConfig().apply {
         token = botToken
-        myCommands()
+        username = botName
+
+        receiving {
+            handling {
+                myCommands()
+            }
+        }
     }
+
+    val context = TelegramBotFactory.createTelegramBotContext(config)
+    val updateReceiver = context.updateReceiver
+
+    private val chain: MutableMap<String, String> = mutableMapOf()
 
     fun startPolling() {
-        bot.startPolling()
+        updateReceiver.start()
     }
 
-    override suspend fun sendNotification(chatId: ChatId, text: String) {
-        bot.sendMessage(
+    override suspend fun sendNotification(chatId: Long, text: String) {
+        context.telegramBot.sendMessage(
             chatId = chatId,
             text = text
         )
     }
 
-    private fun Bot.Builder.myCommands() {
-        dispatch {
-            command("help") {
-                bot.sendMessage(
-                    chatId = ChatId.fromId(update.message?.chat?.id ?: return@command),
-                    text = "/help - Вывести список доступных команд\n" +
-                            "/login - Ввести учётные данные от аккаунта планки\n" +
-                            "/addWatcher - Подключить нотификацию для отслеживания определенных действий на доступных досках\n" +
-                            "/stopWatch - Приостановить нотификацию\n" +
-                            "/finish - Завершить работу с ботом\n" +
-                            "\n"
-                )
-            }
-
-            command("login") {
-                val cash = Credentials.entries
-                    .associateWith { "" }
-                    .toMutableMap()
-
-                var currentStage = Credentials.LOGIN
-                bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Введите ${currentStage.description} от аккаунта планки:")
-                text {
-                    cash[currentStage] = text
-                    when(currentStage) {
-                        Credentials.LOGIN -> {
-                            currentStage = Credentials.PASSWORD
-                            bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Введите ${currentStage.description} от аккаунта планки:")
-                        }
-                        Credentials.PASSWORD -> {
-                            botScope.launch {
-                                dao.addOrUpdateUserCredentials(
-                                    UserPlankaCredentials(
-                                        plankaPassword = cash[Credentials.PASSWORD] ?: return@launch,
-                                        plankaLogin = cash[Credentials.LOGIN] ?: return@launch,
-                                        telegramChatId = message.chat.id,
-                                    )
-                                )
-                            }
-                            bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Данные успешно сохранены!")
-                            currentStage = Credentials.END
-                        }
-                        Credentials.END -> {  }
-                    }
-
-                }
-                //if (currentStage == Credentials.END)
-                    //removeHandler()
-            }
-
-            command("addWatcher") {
-                botScope.launch {
-                    dao.getCredentialsByTelegramId(
-                        telegramChatId = message.chat.id,
-                    ) ?: run {
-                        bot.sendMessage(
-                            chatId = ChatId.fromId(message.chat.id),
-                            text = "В первую очередь необходимо ввести учётные данные от планки!",
-                        )
-                        return@launch
-                    }
-
-                    val credentials = dao.getCredentialsByTelegramId(message.chat.id)
-                        ?: return@launch
-
-                    val userId = PlankaClient(
-                        plankaUrl = plankaUrl,
-                        plankaUsername = credentials.plankaLogin,
-                        plankaPassword = credentials.plankaPassword,
-                        maybeDisabledNotificationListNames = null,
-                    ).getUserData()
-                        ?.items
-                        ?.find { it.username == credentials.plankaLogin || it.email == credentials.plankaLogin }
-                        ?.id
-                        ?: return@launch
-
-                    try {
-                        dao.addNotification(
-                            notification = Notification(
-                                telegramChatId = message.chat.id,
-                                watchedActions = Watcher.BoardAction.entries,
-                                userId = userId,
-                            )
-                        )
-                    } catch (e: MongoWriteException) {
-                        bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Нотификация уже подключена!")
-                        return@launch
-                    }
-
-                    bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Нотификация подключена!")
-                }
-            }
-
-            command("stopWatch") {
-                botScope.launch {
-                    dao.deleteNotification(telegramChatId = message.chat.id)
-
-                    bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Нотификация приостановлена!")
-                }
-            }
-
-            command("finish") {
-                botScope.launch {
-                    dao.doInTransaction {
-                        deleteNotification(telegramChatId = message.chat.id)
-                        deletePlankaCredentials(telegramChatId = message.chat.id)
-                    }
-
-                    bot.sendMessage(chatId = ChatId.fromId(message.chat.id), text = "Работа с ботом прекращённа")
-                }
-            }
+    private fun BotHandling.myCommands() {
+        command("/help") {
+            sendMessage(
+                text = "/help - Вывести список доступных команд\n" +
+                        "/login - Ввести учётные данные от аккаунта планки\n" +
+                        "/addWatcher - Подключить нотификацию для отслеживания определенных действий на доступных досках\n" +
+                        "/stopWatch - Приостановить нотификацию\n" +
+                        "/finish - Завершить работу с ботом\n" +
+                        "\n"
+            )
         }
-    }
 
-    private enum class Credentials(val description: String) {
-        LOGIN("логин или почта"),
-        PASSWORD("пароль"),
-        END(""),
+        command("/login", next = "get_login") {
+            sendMessage("Введите логин от аккаунта планки:")
+        }
+
+        step("get_login", next = "get_password") {
+            chain["login"] = text
+            sendMessage("Введите пароль от аккаунта планки:")
+        }
+
+        step("get_password") {
+            val login = chain["login"] ?: return@step
+
+            dao.addOrUpdateUserCredentials(
+                UserPlankaCredentials(
+                    plankaPassword = text,
+                    plankaLogin = login,
+                    telegramChatId = chat.id,
+                )
+            )
+
+            sendMessage("Данные успешно сохранены!")
+        }
+
+        command("/addWatcher") {
+            val credentials = dao.getCredentialsByTelegramId(chat.id)
+                ?: run {
+                    sendMessage("В первую очередь необходимо ввести учётные данные от планки!")
+                    return@command
+                }
+
+            val userId = plankaClient.getUserData()
+                ?.items
+                ?.find { it.username == credentials.plankaLogin }
+                ?.id
+                ?: run {
+                    sendMessage("Пользователь с name: ${credentials.plankaLogin} not found!")
+                    return@command
+                }
+
+            try {
+                dao.addNotification(
+                    notification = Notification(
+                        telegramChatId = chat.id,
+                        watchedActions = Watcher.BoardAction.entries,
+                        userId = userId,
+                    )
+                )
+            } catch (e: MongoWriteException) {
+                sendMessage("Нотификация уже подключена!")
+                return@command
+            }
+
+            sendMessage("Нотификация подключена!")
+        }
+
+        command("/stopWatch") {
+            dao.deleteNotification(telegramChatId = chat.id)
+            sendMessage("Нотификация приостановлена!")
+        }
+
+        command("/finish") {
+            dao.doInTransaction {
+                deleteNotification(telegramChatId = chat.id)
+                deletePlankaCredentials(telegramChatId = chat.id)
+            }
+
+            sendMessage("Работа с ботом прекращёна")
+        }
     }
 }

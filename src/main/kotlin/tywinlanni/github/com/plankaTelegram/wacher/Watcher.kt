@@ -1,9 +1,8 @@
 package tywinlanni.github.com.plankaTelegram.wacher
 
-import com.github.kotlintelegrambot.entities.ChatId
 import io.ktor.util.collections.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.slf4j.LoggerFactory
@@ -15,7 +14,6 @@ import tywinlanni.github.com.plankaTelegram.share.BoardId
 import tywinlanni.github.com.plankaTelegram.share.CardId
 import tywinlanni.github.com.plankaTelegram.share.TelegramChatId
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = LoggerFactory.getLogger(Watcher::class.java)
 
@@ -35,22 +33,25 @@ class Watcher(
     private val coroutineScope = CoroutineScope(Dispatchers.IO + job)
 
     private val state by lazy { State() }
-    private val diffChannel by lazy { Channel<Pair<PlankaData, StateDiff>>() }
+    private val diffFlow = MutableSharedFlow<Triple<PlankaData, StateDiff, PlankaData>>()
 
     private val notificationBoardsCache by lazy { mutableMapOf<TelegramChatId, Set<BoardId>>() }
     private val notificationBoardsCacheMutex by lazy { Mutex() }
 
     private val spamProtectedCards by lazy { ConcurrentSet<CardId>() }
 
-    fun start() {
+    suspend fun start() {
         updateCacheJob.start()
         watchJob.start()
         notificationJob.start()
+
+        job.join()
     }
 
     private val updateCacheJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             logger.debug("Start update cache")
+
             notificationBoardsCacheMutex.withLock {
                 notificationBoardsCache.clear()
 
@@ -60,6 +61,7 @@ class Watcher(
                         addAvailablePlankaBoardsToCache(telegramChatId)
                     }
             }
+
             logger.debug("End update cache")
 
             delay(NOTIFICATION_CACHE_UPDATE_DELAY)
@@ -67,8 +69,7 @@ class Watcher(
     }
 
     private val notificationJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
-        while (isActive) {
-            val (stateFromPlanka, diff) = diffChannel.receive()
+        diffFlow.collect { (stateFromPlanka, diff, oldState) ->
             logger.debug("Start send notifications to users")
 
             notificationBoardsCacheMutex.withLock {
@@ -98,7 +99,7 @@ class Watcher(
                             .flatten()
                             .forEach { (action, cardId) ->
                                 val card = if (action == BoardAction.DELETE)
-                                    state.oldValue[stateFromPlanka.board.id]?.cards?.get(cardId)
+                                    oldState.cards[cardId]
                                 else
                                     stateFromPlanka.cards[cardId]
                                 if (card != null) {
@@ -117,7 +118,7 @@ class Watcher(
                                                 return@forNotifications
                                             } else {
                                                 notificationBot.sendNotification(
-                                                    chatId = ChatId.fromId(notification.telegramChatId),
+                                                    chatId = notification.telegramChatId,
                                                     text = when (action) {
                                                         BoardAction.ADD -> {
                                                             addBoardToSpamProtected(cardId)
@@ -173,7 +174,7 @@ class Watcher(
                                                         BoardAction.TASK_COMPLETE -> buildMessage(
                                                             state = stateFromPlanka,
                                                             message = "В задаче: ${card.name}" +
-                                                                    " следующие подзадачи отмечены как выполненые:\n" +
+                                                                    " следующие подзадачи отмечены как выполненные:\n" +
                                                                     diff.completedTasks[cardId]
                                                                         ?.joinToString("\n") { it.name } + "\n\n",
                                                             card = card,
@@ -181,11 +182,7 @@ class Watcher(
 
                                                         BoardAction.ADD_COMMENT -> buildMessage(
                                                             state = stateFromPlanka,
-                                                            message = "В задаче: ${card.name} новые коментарии:\n" +
-                                                                    diff.updatedComments[cardId]
-                                                                        ?.joinToString("\n") {
-                                                                            (maybeUser?.name ?: "") + ": " + it.data.text
-                                                                        } + "\n\n",
+                                                            message = "В задаче: ${card.name} новые комментарии",
                                                             card = card,
                                                         )
                                                     }
@@ -217,21 +214,10 @@ class Watcher(
         }
     }
 
-    val threadCount = AtomicInteger(Thread.activeCount())
-
     private val watchJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
             logger.info("Start check planka state")
             val projects = serviceClient.projects()
-
-            val tc = Thread.activeCount()
-            val was = threadCount.get()
-
-            if (tc > was) {
-                logger.warn("Total thread count change. Was - $was, Now - $tc")
-            }
-
-            threadCount.set(tc)
 
             projects
                 ?.items
@@ -285,6 +271,11 @@ class Watcher(
         suspend fun setNewState(boardId: BoardId, newState: PlankaData) {
             if (oldValue[boardId] == null) {
                 oldValue[boardId] = newState
+                return
+            }
+
+            if (oldValue[boardId] == newState) {
+                logger.info("No changes for board: ${newState.board.name}")
                 return
             }
 
@@ -345,8 +336,9 @@ class Watcher(
                     .mapNotNull { taskId ->
                         newState.tasks[taskId]
                             ?.let { taskData ->
-                                taskData.cardId
-                                    .also { cardId ->
+                                oldState.taskList[taskData.taskListId]
+                                    ?.cardId
+                                    ?.also { cardId ->
                                         newDiff.addedTasks[cardId]?.add(taskData)
                                             ?: run { newDiff.addedTasks[cardId] = mutableListOf(taskData) }
                                     }
@@ -359,8 +351,9 @@ class Watcher(
                     .mapNotNull { taskId ->
                         oldState.tasks[taskId]
                             ?.let { taskData ->
-                                taskData.cardId
-                                    .also { cardId ->
+                                oldState.taskList[taskData.taskListId]
+                                    ?.cardId
+                                    ?.also { cardId ->
                                         newDiff.removedTasks[cardId]?.add(taskData)
                                             ?: run { newDiff.removedTasks[cardId] = mutableListOf(taskData) }
                                     }
@@ -371,9 +364,10 @@ class Watcher(
             newDiff.diffCards[BoardAction.TASK_COMPLETE]?.addAll(
                 newState.tasks.values.filter { newTaskData ->
                     newTaskData.isCompleted && oldState.tasks[newTaskData.id]?.isCompleted == false
-                }.map { taskData ->
-                    taskData.cardId
-                        .also { cardId ->
+                }.mapNotNull { taskData ->
+                    newState.taskList[taskData.taskListId]
+                        ?.cardId
+                        ?.also { cardId ->
                             newDiff.completedTasks[cardId]?.add(taskData)
                                 ?: run { newDiff.completedTasks[cardId] = mutableListOf(taskData) }
                         }
@@ -403,7 +397,11 @@ class Watcher(
             if (newDiff.diffCards.values.flatten().isEmpty())
                 return
 
-            diffChannel.send(newState to newDiff)
+            diffFlow.emit(Triple(
+                first = newState,
+                second = newDiff,
+                third = oldState,
+            ))
         }
     }
 

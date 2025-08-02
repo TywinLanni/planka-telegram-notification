@@ -100,6 +100,7 @@ class PlankaClient(
             .apply {
                 lists.putAll(
                     included.lists
+                        .filter { it.name != null }
                         .doIfDisabledListsExist { lists ->
                             lists.onEach { list ->
                                 if (list.name in maybeDisabledNotificationListNames!!) {
@@ -138,7 +139,7 @@ class PlankaClient(
                             tasks
                                 .filter { taskData ->
                                     if (taskData.id in disabledTaskId) {
-                                        if (taskData.cardId !in disabledCardId) {
+                                        if (taskData.taskListId !in disabledCardId) {
                                             disabledTaskId.remove(taskData.id)
                                             movedBackTasks.add(taskData.id)
                                             true
@@ -146,7 +147,7 @@ class PlankaClient(
                                             false
                                         }
                                     } else {
-                                        if (taskData.cardId in disabledCardId)
+                                        if (taskData.taskListId in disabledCardId)
                                             disabledTaskId.add(taskData.id)
                                         true
                                     }
@@ -172,6 +173,7 @@ class PlankaClient(
             cards = cards,
             users = users,
             lists = lists,
+            taskList = board.included.taskLists.associateBy { it.id },
             tasks = tasks,
             actions = actions,
             disabledListsId = disabledListsId,
@@ -183,7 +185,7 @@ class PlankaClient(
         null
     }
 
-    private suspend fun loadCardActions(cardId: CardId) = client.get("/api/cards/$cardId/actions") {
+    private suspend fun loadCardActions(cardId: CardId): Actions? = client.get("/api/cards/$cardId/actions") {
         parameter(key = "withDetails", value = false)
     }.runCatching {
         // todo [tywin lanni 03.09.23] завести ишью (мб проблема после перемещения доски на другую доску)
@@ -200,7 +202,6 @@ class PlankaClient(
         client.get("/api/users")
             .body<UsersData>()
     }.getOrNull()
-
 
     private inline fun <T> List<T>.doIfDisabledListsExist(block: (List<T>) -> List<T>): List<T> =
         this.let {

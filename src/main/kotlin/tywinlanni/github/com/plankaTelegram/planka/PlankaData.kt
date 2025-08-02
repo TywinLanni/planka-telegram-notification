@@ -8,6 +8,7 @@ data class PlankaData(
     val cards: Map<CardId, CardData>,
     val users: Map<UserId, UserData>,
     val lists: Map<ListId, PlankaList>,
+    val taskList: Map<ListId, TaskList>,
     val tasks: Map<TaskId, TaskData>,
     val actions: Map<ActionId, Action>,
     val disabledListsId: Set<ListId>,
