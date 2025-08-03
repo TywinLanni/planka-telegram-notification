@@ -12,7 +12,8 @@ services:
       - TELEGRAM_BOT_NAME=@my_bot
       - DISABLED_PLANKA_LIST_NAMES=Завершенные,Выложено
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
 
   mongo:
@@ -23,10 +24,11 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
 
 volumes:
