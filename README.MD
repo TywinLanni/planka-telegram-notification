@@ -13,7 +13,7 @@ This is a telegram bot that uses the planka api to send card change to telegram.
 3. Clone this repo
 4. Create docker image
 ```bash
-docker build -t tywinlanni/planka-notification-bot:0.2.0 .
+docker build -t chaibez/planka-notification-bot:0.2.6 .
 ```
 
 ```bash

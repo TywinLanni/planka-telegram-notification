@@ -33,7 +33,10 @@ class Watcher(
     private val coroutineScope = CoroutineScope(Dispatchers.IO + job)
 
     private val state by lazy { State() }
-    private val diffFlow = MutableSharedFlow<Triple<PlankaData, StateDiff, PlankaData>>()
+    private val diffFlow = MutableSharedFlow<Triple<PlankaData, StateDiff, PlankaData>>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
 
     private val notificationBoardsCache by lazy { mutableMapOf<TelegramChatId, Set<BoardId>>() }
     private val notificationBoardsCacheMutex by lazy { Mutex() }
@@ -50,73 +53,139 @@ class Watcher(
 
     private val updateCacheJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
         while (isActive) {
-            logger.debug("Start update cache")
+            logger.info("Start update cache")
 
-            notificationBoardsCacheMutex.withLock {
-                notificationBoardsCache.clear()
-
-                dao.getNotifications()
+            try {
+                // Fetch data OUTSIDE the lock to avoid blocking notificationJob
+                val telegramChatIds = dao.getNotifications()
                     .map(Notification::telegramChatId)
-                    .forEach { telegramChatId ->
-                        addAvailablePlankaBoardsToCache(telegramChatId)
+                
+                logger.info("Fetching boards for ${telegramChatIds.size} chats")
+                
+                val newCache = mutableMapOf<TelegramChatId, Set<BoardId>>()
+                telegramChatIds.forEach { telegramChatId ->
+                    logger.info("Fetching boards for chat $telegramChatId")
+                    try {
+                        val boards = withTimeout(30_000L) {
+                            fetchAvailablePlankaBoardsForChat(telegramChatId)
+                        }
+                        if (boards != null) {
+                            newCache[telegramChatId] = boards
+                            logger.info("Fetched ${boards.size} boards for chat $telegramChatId")
+                        } else {
+                            logger.warn("No boards fetched for chat $telegramChatId - possibly invalid credentials")
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Failed to fetch boards for chat $telegramChatId - possibly invalid credentials or network issue", e)
                     }
-            }
+                }
 
-            logger.debug("End update cache")
+                logger.info("Updating cache with ${newCache.size} entries")
+                // Only hold lock for the actual cache update (fast operation)
+                notificationBoardsCacheMutex.withLock {
+                    notificationBoardsCache.clear()
+                    notificationBoardsCache.putAll(newCache)
+                }
+
+                logger.info("End update cache")
+            } catch (e: Exception) {
+                logger.error("Update cache failed", e)
+            }
 
             delay(NOTIFICATION_CACHE_UPDATE_DELAY)
         }
     }
 
     private val notificationJob = coroutineScope.launch(start = CoroutineStart.LAZY) {
+        logger.info("Start notification job")
         diffFlow.collect { (stateFromPlanka, diff, oldState) ->
-            logger.debug("Start send notifications to users")
+            logger.info("Start send notifications to users")
+
+            val allNotifications = dao.getNotifications()
+            logger.info("All notifications count: ${allNotifications.size}")
+            
+            if (allNotifications.isEmpty()) {
+                logger.warn("No notifications configured, skipping")
+                return@collect
+            }
+            
+            // Skip notifications with cache miss to avoid blocking
+            // updateCacheJob will populate cache on next cycle
+            val notificationsWithCache = allNotifications.filter { notification ->
+                val hasCachedBoards = notificationBoardsCacheMutex.withLock {
+                    notificationBoardsCache[notification.telegramChatId] != null
+                }
+                
+                if (!hasCachedBoards) {
+                    logger.warn("Cache miss for ${notification.telegramChatId}, skipping notification (will be cached on next update cycle)")
+                }
+                
+                hasCachedBoards
+            }
+            
+            if (notificationsWithCache.isEmpty()) {
+                logger.warn("No notifications with cached boards, skipping")
+                logger.info("End send notifications to users")
+                return@collect
+            }
 
             notificationBoardsCacheMutex.withLock {
                 val allWatchedBoards = notificationBoardsCache
                     .values
                     .flatten()
                     .distinct()
-
-                val allNotifications = dao.getNotifications()
-                    .takeIf { notifications -> notifications.isNotEmpty() }
-                    ?.onEach { notifications ->
-                        if (notificationBoardsCache[notifications.telegramChatId] == null)
-                            addAvailablePlankaBoardsToCache(notifications.telegramChatId)
-                    } ?: return@withLock
+                
+                logger.info("Watched boards count: ${allWatchedBoards.size}")
 
                 allWatchedBoards
                     .associateWith { boardId ->
-                        allNotifications
+                        notificationsWithCache
                             .filter { notifications ->
                                 boardId in notificationBoardsCache[notifications.telegramChatId]!!
                             }
                     }
                     .let { notificationsByBoards: Map<BoardId, List<Notification>> ->
-                        diff
+                        logger.info("Notifications by boards: ${notificationsByBoards.mapValues { it.value.size }}")
+                        
+                        val allDiffCards = diff
                             .diffCards
                             .map { entry -> entry.value.map { entry.key to it } }
                             .flatten()
-                            .forEach { (action, cardId) ->
+                        
+                        logger.info("Total diff cards: ${allDiffCards.size}, actions: ${diff.diffCards.mapValues { it.value.size }}")
+                        
+                        allDiffCards.forEach { (action, cardId) ->
                                 val card = if (action == BoardAction.DELETE)
                                     oldState.cards[cardId]
                                 else
                                     stateFromPlanka.cards[cardId]
+                                logger.info("Processing action=$action, cardId=$cardId, card=${card?.name}")
+                                
                                 if (card != null) {
                                     val boardId = card.boardId
 
                                     if (card.id in spamProtectedCards &&
-                                        action in listOf(BoardAction.UPDATE, BoardAction.TASK_ADD))
+                                        action in listOf(BoardAction.UPDATE, BoardAction.TASK_ADD)) {
+                                        logger.info("Skipping spam-protected card: ${card.id}")
                                         return@forEach
+                                    }
 
-                                    notificationsByBoards[boardId]?.forEach forNotifications@ { notification ->
+                                    val notificationsForBoard = notificationsByBoards[boardId]
+                                    logger.info("Board $boardId has ${notificationsForBoard?.size ?: 0} notifications")
+                                    
+                                    notificationsForBoard?.forEach forNotifications@ { notification ->
+                                        logger.info("Checking notification: chatId=${notification.telegramChatId}, watchedActions=${notification.watchedActions}, userId=${notification.userId}")
+                                        
                                         if (action in notification.watchedActions) {
                                             val maybeUser = stateFromPlanka.users[card.creatorUserId]
+                                            logger.info("Action $action is watched. Card creator: ${maybeUser?.id}, notification userId: ${notification.userId}")
 
                                             if ((action == BoardAction.ADD || action == BoardAction.ADD_COMMENT)
                                                 && notification.userId == maybeUser?.id) {
+                                                logger.info("Skipping self-notification for user ${notification.userId}")
                                                 return@forNotifications
                                             } else {
+                                                logger.info("Sending notification to ${notification.telegramChatId}")
                                                 notificationBot.sendNotification(
                                                     chatId = notification.telegramChatId,
                                                     text = when (action) {
@@ -187,8 +256,10 @@ class Watcher(
                                                         )
                                                     }
                                                 )
+                                                logger.info("Notification sent successfully to ${notification.telegramChatId}")
                                             }
-                                            logger.debug("Send notification to telegram channel: ${notification.telegramChatId}")
+                                        } else {
+                                            logger.info("Action $action is NOT in watchedActions: ${notification.watchedActions}")
                                         }
                                     }
                                 }
@@ -196,8 +267,9 @@ class Watcher(
                     }
             }
 
-            logger.debug("End send notifications to users")
+            logger.info("End send notifications to users")
         }
+        logger.info("End notification job")
     }
 
     private fun buildMessage(state: PlankaData, message: String, card: CardData) = message +
@@ -245,9 +317,13 @@ class Watcher(
         }
     }
 
-    private suspend fun addAvailablePlankaBoardsToCache(telegramChatId: TelegramChatId) {
-        dao.getCredentialsByTelegramId(telegramChatId)
+    private suspend fun fetchAvailablePlankaBoardsForChat(telegramChatId: TelegramChatId): Set<BoardId>? {
+        logger.info("fetchAvailablePlankaBoardsForChat: Getting credentials for chat $telegramChatId")
+        
+        return dao.getCredentialsByTelegramId(telegramChatId)
             ?.let { userPlankaCredentials ->
+                logger.info("fetchAvailablePlankaBoardsForChat: Creating PlankaClient for user ${userPlankaCredentials.plankaLogin}")
+                
                 val client = PlankaClient(
                     plankaUsername = userPlankaCredentials.plankaLogin,
                     plankaPassword = userPlankaCredentials.plankaPassword,
@@ -255,17 +331,25 @@ class Watcher(
                     maybeDisabledNotificationListNames = null,
                 )
 
-                notificationBoardsCache[userPlankaCredentials.telegramChatId] = client.projects()
+                logger.info("fetchAvailablePlankaBoardsForChat: Calling client.projects() for chat $telegramChatId")
+                val projects = client.projects()
+                logger.info("fetchAvailablePlankaBoardsForChat: Got projects response for chat $telegramChatId: ${projects != null}")
+                
+                projects
                     ?.included
                     ?.boards
                     ?.map(Board::id)
                     ?.toSet()
-                    ?: emptySet()
-            } ?: logger.warn("Telegram chat: $telegramChatId accept notification but don't have a planka credentials")
+                    ?.also { logger.info("fetchAvailablePlankaBoardsForChat: Returning ${it.size} boards for chat $telegramChatId") }
+                    ?: emptySet<BoardId>().also { logger.warn("fetchAvailablePlankaBoardsForChat: No boards found for chat $telegramChatId") }
+            } ?: run {
+                logger.warn("Telegram chat: $telegramChatId accept notification but don't have a planka credentials")
+                null
+            }
     }
 
     inner class State {
-        var oldValue: ConcurrentHashMap<BoardId, PlankaData?> = ConcurrentHashMap()
+        var oldValue: ConcurrentHashMap<BoardId, PlankaData> = ConcurrentHashMap()
             private set
 
         suspend fun setNewState(boardId: BoardId, newState: PlankaData) {
@@ -397,11 +481,14 @@ class Watcher(
             if (newDiff.diffCards.values.flatten().isEmpty())
                 return
 
-            diffFlow.emit(Triple(
-                first = newState,
-                second = newDiff,
-                third = oldState,
-            ))
+            logger.info("emit new diff")
+            diffFlow.emit(
+                Triple(
+                    first = newState,
+                    second = newDiff,
+                    third = oldState,
+                )
+            )
         }
     }
 

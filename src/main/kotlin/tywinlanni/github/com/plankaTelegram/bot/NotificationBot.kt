@@ -16,6 +16,7 @@ class NotificationBot(
     private val botName: String,
     private val dao: DAO,
     private val plankaClient: PlankaClient,
+    private val plankaUrl: String,
 ) : TelegramBot {
     val config = TelegramBotConfig().apply {
         token = botToken
@@ -43,20 +44,62 @@ class NotificationBot(
             text = text
         )
     }
+    
+    private suspend fun validateCredentials(login: String, password: String): Boolean {
+        return try {
+            kotlinx.coroutines.withTimeout(10_000L) {
+                val testClient = PlankaClient(
+                    plankaUsername = login,
+                    plankaPassword = password,
+                    plankaUrl = plankaUrl,
+                    maybeDisabledNotificationListNames = null,
+                )
+                
+                // Try to fetch projects - if credentials are invalid, this will fail
+                val projects = testClient.projects()
+                projects != null
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     private fun BotHandling.myCommands() {
         command("/help") {
-            sendMessage(
-                text = "/help - Вывести список доступных команд\n" +
-                        "/login - Ввести учётные данные от аккаунта планки\n" +
-                        "/addWatcher - Подключить нотификацию для отслеживания определенных действий на доступных досках\n" +
-                        "/stopWatch - Приостановить нотификацию\n" +
-                        "/finish - Завершить работу с ботом\n" +
-                        "\n"
-            )
+            val helpText = when (chat.type) {
+                "private" -> """
+                    /help - Вывести список доступных команд
+                    /login - Ввести учётные данные от аккаунта планки
+                    /addWatcher - Подключить нотификацию для отслеживания определенных действий на доступных досках
+                    /stopWatch - Приостановить нотификацию
+                    /finish - Завершить работу с ботом
+                """.trimIndent()
+                "group", "supergroup" -> """
+                    /help - Вывести список доступных команд
+                    /login - Ввести учётные данные от группового аккаунта планки
+                    /addWatcher - Подключить нотификацию для группы
+                    /stopWatch - Приостановить нотификацию
+                    /finish - Завершить работу с ботом
+                    
+                    Примечание: Для группы используется один общий аккаунт Planka
+                """.trimIndent()
+                else -> "Команды недоступны для этого типа чата"
+            }
+            sendMessage(text = helpText)
         }
 
         command("/login", next = "get_login") {
+            if (chat.type in listOf("group", "supergroup")) {
+                sendMessage(
+                    "⚠️ ВНИМАНИЕ: Учётные данные будут видны всем участникам группы в истории сообщений!\n\n" +
+                    "Рекомендуется:\n" +
+                    "1. Создать отдельный аккаунт Planka для этой группы\n" +
+                    "2. Дать ему доступ только к нужным доскам\n" +
+                    "3. После ввода пароля удалить сообщения с учётными данными\n\n" +
+                    "Введите логин от аккаунта планки:"
+                )
+                return@command
+            }
             sendMessage("Введите логин от аккаунта планки:")
         }
 
@@ -68,21 +111,40 @@ class NotificationBot(
         step("get_password") {
             val login = chain["login"] ?: return@step
 
-            dao.addOrUpdateUserCredentials(
-                UserPlankaCredentials(
-                    plankaPassword = text,
-                    plankaLogin = login,
-                    telegramChatId = chat.id,
+            sendMessage("Проверяю учётные данные...")
+            
+            // Validate credentials before saving
+            val isValid = validateCredentials(login, text)
+            
+            if (!isValid) {
+                sendMessage("❌ Неверные учётные данные! Не удалось войти в Planka с указанным логином и паролем.\n\nПопробуйте снова: /login")
+                return@step
+            }
+            
+            runCatching {
+                dao.addOrUpdateUserCredentials(
+                    UserPlankaCredentials(
+                        plankaPassword = text,
+                        plankaLogin = login,
+                        telegramChatId = chat.id,
+                    )
                 )
-            )
-
-            sendMessage("Данные успешно сохранены!")
+            }.onFailure {
+                sendMessage("❌ Ошибка при сохранении данных в базу: ${it.message}")
+            }.onSuccess {
+                val successMessage = when (chat.type) {
+                    "private" -> "✅ Данные успешно сохранены!"
+                    "group", "supergroup" -> "✅ Данные успешно сохранены!\n\n⚠️ Рекомендуется удалить сообщения с учётными данными из истории чата."
+                    else -> "✅ Данные успешно сохранены!"
+                }
+                sendMessage(successMessage)
+            }
         }
 
         command("/addWatcher") {
             val credentials = dao.getCredentialsByTelegramId(chat.id)
                 ?: run {
-                    sendMessage("В первую очередь необходимо ввести учётные данные от планки!")
+                    sendMessage("В первую очередь необходимо ввести учётные данные от планки! Используйте команду /login")
                     return@command
                 }
 
@@ -108,12 +170,23 @@ class NotificationBot(
                 return@command
             }
 
-            sendMessage("Нотификация подключена!")
+            val successMessage = when (chat.type) {
+                "private" -> "Нотификация подключена!"
+                "group", "supergroup" -> "Нотификация подключена для группы \"${chat.title}\"!"
+                else -> "Нотификация подключена!"
+            }
+            sendMessage(successMessage)
         }
 
         command("/stopWatch") {
             dao.deleteNotification(telegramChatId = chat.id)
-            sendMessage("Нотификация приостановлена!")
+            
+            val message = when (chat.type) {
+                "private" -> "Нотификация приостановлена!"
+                "group", "supergroup" -> "Нотификация приостановлена для группы \"${chat.title}\"!"
+                else -> "Нотификация приостановлена!"
+            }
+            sendMessage(message)
         }
 
         command("/finish") {
@@ -122,7 +195,12 @@ class NotificationBot(
                 deletePlankaCredentials(telegramChatId = chat.id)
             }
 
-            sendMessage("Работа с ботом прекращёна")
+            val message = when (chat.type) {
+                "private" -> "Работа с ботом прекращена"
+                "group", "supergroup" -> "Настройки для группы \"${chat.title}\" удалены"
+                else -> "Работа с ботом прекращена"
+            }
+            sendMessage(message)
         }
     }
 }

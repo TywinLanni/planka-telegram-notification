@@ -39,6 +39,7 @@ suspend fun main() {
         botName = telegramBotName,
         dao = dao,
         plankaClient = client,
+        plankaUrl = plankaConnectionString,
     ).apply {
         startPolling()
     }
